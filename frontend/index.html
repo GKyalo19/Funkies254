@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Funkies254 — Student Events in Kenya</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/pages.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <main>
+    <section class="hero container">
+      <h1>Funkies 254</h1>
+      <p class="tagline">&ldquo;Know all about the events happening all around&rdquo;</p>
+      <form class="hero-search" id="hero-search-form">
+        <div class="search-bar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input type="search" name="q" placeholder="Search events" />
+        </div>
+      </form>
+      <div class="hero-actions" id="hero-actions"></div>
+    </section>
+
+    <nav class="category-row" aria-label="Event categories">
+      <a class="category-item" href="/pages/event-listings.html?category=math">
+        <span class="icon-circle"><img src="/assets/icons/cat-math.svg" alt="" /></span>
+        <span>Math</span>
+      </a>
+      <a class="category-item" href="/pages/event-listings.html?category=languages">
+        <span class="icon-circle"><img src="/assets/icons/cat-languages.svg" alt="" /></span>
+        <span>Languages</span>
+      </a>
+      <a class="category-item" href="/pages/event-listings.html?category=sciences">
+        <span class="icon-circle"><img src="/assets/icons/cat-sciences.svg" alt="" /></span>
+        <span>Sciences</span>
+      </a>
+      <a class="category-item" href="/pages/event-listings.html?category=humanities">
+        <span class="icon-circle"><img src="/assets/icons/cat-humanities.svg" alt="" /></span>
+        <span>Humanities</span>
+      </a>
+      <a class="category-item" href="/pages/event-listings.html?category=sports">
+        <span class="icon-circle"><img src="/assets/icons/cat-sports.svg" alt="" /></span>
+        <span>Sports</span>
+      </a>
+      <a class="category-item" href="/pages/event-listings.html?category=chess">
+        <span class="icon-circle"><img src="/assets/icons/cat-chess.svg" alt="" /></span>
+        <span>Chess</span>
+      </a>
+    </nav>
+
+    <section class="page-section container">
+      <div id="category-chips" class="category-chips"></div>
+    </section>
+
+    <section class="page-section container">
+      <div class="section-heading">
+        <h2 id="feed-heading">Recommended for you</h2>
+        <a href="/pages/event-listings.html" class="btn btn-secondary btn-sm">Browse all events</a>
+      </div>
+      <div id="feed-grid" class="event-grid"></div>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script type="module" src="/js/pages/home.js"></script>
+</body>
+</html>

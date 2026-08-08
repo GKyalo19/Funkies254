@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Add Event — Funkies254</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/pages.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <main class="container page-section" style="max-width:720px;">
+    <h1>Add Event</h1>
+    <p>Staff-only tool for curating new events. (You can also use the Django admin for bulk edits.)</p>
+
+    <div class="card-panel">
+      <form id="event-form" novalidate>
+        <div class="field">
+          <label for="title">Title</label>
+          <input type="text" id="title" name="title" required />
+        </div>
+        <div class="field">
+          <label for="organizer">Organizer</label>
+          <select id="organizer" name="organizer" required></select>
+        </div>
+        <div class="field">
+          <label>Categories</label>
+          <div class="tag-select" id="categories-field"></div>
+        </div>
+        <div class="field">
+          <label for="short_description">Short description (for cards)</label>
+          <input type="text" id="short_description" name="short_description" maxlength="255" />
+        </div>
+        <div class="field">
+          <label for="description">Full description</label>
+          <textarea id="description" name="description" rows="4" required></textarea>
+        </div>
+        <div class="field">
+          <label for="venue_name">Venue name</label>
+          <input type="text" id="venue_name" name="venue_name" required />
+        </div>
+        <div class="field">
+          <label for="address">Address</label>
+          <input type="text" id="address" name="address" />
+        </div>
+        <div class="field">
+          <label for="location">Location (city/region)</label>
+          <input type="text" id="location" name="location" required />
+        </div>
+        <div class="field">
+          <label for="education_level">Education level</label>
+          <select id="education_level" name="education_level">
+            <option value="high_school">High School</option>
+            <option value="college">College</option>
+            <option value="both" selected>Both</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="start_datetime">Start date &amp; time</label>
+          <input type="datetime-local" id="start_datetime" name="start_datetime" required />
+        </div>
+        <div class="field">
+          <label for="end_datetime">End date &amp; time (optional)</label>
+          <input type="datetime-local" id="end_datetime" name="end_datetime" />
+        </div>
+        <div class="field">
+          <label for="registration_fee">Registration fee (KES, 0 = free)</label>
+          <input type="number" id="registration_fee" name="registration_fee" value="0" min="0" step="0.01" />
+        </div>
+        <div class="field">
+          <label for="capacity">Capacity (leave blank for unlimited)</label>
+          <input type="number" id="capacity" name="capacity" min="1" />
+        </div>
+        <div class="field">
+          <label><input type="checkbox" id="is_featured" name="is_featured" style="width:auto;display:inline;margin-right:8px;" />Feature this event (boosts it in the recommended feed)</label>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="submit-btn">Create Event</button>
+        </div>
+      </form>
+
+      <div id="cover-upload-section" style="display:none;margin-top:24px;border-top:1px solid var(--color-card-border);padding-top:24px;">
+        <h4>Add a cover image</h4>
+        <input type="file" id="cover-image-input" accept="image/*" />
+      </div>
+    </div>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script type="module" src="/js/pages/event-form.js"></script>
+</body>
+</html>

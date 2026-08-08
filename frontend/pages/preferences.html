@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preferences — Funkies254</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/pages.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <main class="container profile-page-wrap">
+    <nav class="profile-tabs">
+      <a href="/pages/profile.html">My Profile</a>
+      <a href="/pages/preferences.html" class="active">Preferences</a>
+      <a href="/pages/registrations.html">My Registrations</a>
+    </nav>
+
+    <section class="card-panel">
+      <h1>Preferences</h1>
+      <p class="preferences-intro">What activities do you want to know more about? Please select your preferences from the categories below</p>
+
+      <form id="preferences-form" novalidate>
+        <div class="preference-group">
+          <h4>Education level</h4>
+          <div class="tag-select" id="education-tags"></div>
+        </div>
+
+        <div class="preference-group">
+          <h4>Categories (subjects &amp; activities)</h4>
+          <div class="tag-select" id="category-tags"></div>
+        </div>
+
+        <div class="preference-group">
+          <h4>Preferred locations</h4>
+          <div class="tag-select" id="location-tags"></div>
+          <div class="field" style="margin-top:12px;max-width:320px;">
+            <input type="text" id="new-location-input" placeholder="Add a city, e.g. Nairobi" style="padding:10px 16px;font-size:14px;" />
+          </div>
+        </div>
+
+        <div class="preference-group">
+          <h4>Happening in the next...</h4>
+          <div class="tag-select" id="days-ahead-tags"></div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-gold" id="save-btn">Save Changes</button>
+          <button type="button" class="btn btn-secondary" id="discard-btn">Discard Changes</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script type="module" src="/js/pages/preferences.js"></script>
+</body>
+</html>

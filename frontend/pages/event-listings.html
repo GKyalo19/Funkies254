@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Event Listings — Funkies254</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/pages.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <main class="container page-section">
+    <div class="listings-banner">
+      <h1 id="listings-heading">All Events</h1>
+      <span id="results-count" style="color:var(--color-text-muted);font-size:14px;"></span>
+    </div>
+
+    <div class="listings-layout">
+      <aside class="filter-panel">
+        <h3>Filter</h3>
+        <div class="filter-group">
+          <h4>Event Category</h4>
+          <div id="filter-category"></div>
+        </div>
+        <div class="filter-group">
+          <h4>Location</h4>
+          <div class="field" style="margin-bottom:0;">
+            <input type="text" id="filter-location" placeholder="e.g. Nairobi" style="padding:8px 14px;font-size:13px;border-radius:var(--radius-md);" />
+          </div>
+        </div>
+        <div class="filter-group">
+          <h4>Education level</h4>
+          <div id="filter-education"></div>
+        </div>
+        <div class="filter-group">
+          <h4>Registration fee</h4>
+          <div id="filter-fee"></div>
+        </div>
+        <button class="btn btn-secondary btn-block btn-sm" id="filter-clear">Clear filters</button>
+      </aside>
+
+      <section>
+        <div id="listings-grid" class="event-grid"></div>
+        <div class="load-more-wrap" id="pagination-controls"></div>
+      </section>
+    </div>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script type="module" src="/js/pages/event-listings.js"></script>
+</body>
+</html>

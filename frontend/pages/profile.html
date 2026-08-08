@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Profile — Funkies254</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/pages.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <main class="container profile-page-wrap">
+    <nav class="profile-tabs">
+      <a href="/pages/profile.html" class="active">My Profile</a>
+      <a href="/pages/preferences.html">Preferences</a>
+      <a href="/pages/registrations.html">My Registrations</a>
+    </nav>
+
+    <section class="card-panel">
+      <h1>Account Profile</h1>
+
+      <div class="avatar-upload-row">
+        <div class="avatar" id="sidebar-avatar"></div>
+        <input type="file" id="avatar-input" accept="image/*" class="visually-hidden" />
+        <button class="btn btn-secondary btn-sm" type="button" id="avatar-upload-btn">Change photo</button>
+      </div>
+
+      <form id="profile-form" novalidate>
+        <div class="profile-field-row">
+          <span class="field-label">First name:</span>
+          <input type="text" id="first_name" name="first_name" />
+        </div>
+        <div class="profile-field-row">
+          <span class="field-label">Last name:</span>
+          <input type="text" id="last_name" name="last_name" />
+        </div>
+        <div class="profile-field-row">
+          <span class="field-label">Email:</span>
+          <input type="email" id="email" name="email" disabled />
+        </div>
+        <div class="profile-field-row">
+          <span class="field-label">Institution:</span>
+          <input type="text" id="institution" name="institution" />
+        </div>
+        <div class="profile-field-row">
+          <span class="field-label">Education level:</span>
+          <select id="education_level" name="education_level" style="flex:1;padding:10px 16px;border-radius:var(--radius-md);border:none;background:var(--color-input-bg);color:var(--color-input-text);font-family:var(--font-display);font-size:16px;">
+            <option value="high_school">High School</option>
+            <option value="college">College</option>
+            <option value="both">Both</option>
+          </select>
+        </div>
+        <div class="profile-field-row">
+          <span class="field-label">Phone number:</span>
+          <input type="text" id="phone_number" name="phone_number" placeholder="1 (405) 546 7788" />
+        </div>
+
+        <a href="/pages/reset-password.html" class="manage-prefs-link" style="font-size:16px;">Change password?</a>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-gold" id="save-btn">Save Changes</button>
+          <button type="button" class="btn btn-secondary" id="discard-btn">Discard Changes</button>
+        </div>
+      </form>
+
+      <a href="/pages/preferences.html" class="manage-prefs-link">Manage preferences?</a>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script type="module" src="/js/pages/profile.js"></script>
+</body>
+</html>

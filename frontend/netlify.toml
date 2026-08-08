@@ -1,0 +1,14 @@
+# Netlify deploy config. No build step — this is plain static HTML/CSS/JS.
+[build]
+  publish = "."
+
+# Every unknown path falls back to index.html would break direct links to
+# /pages/*.html, so we deliberately do NOT add a catch-all SPA redirect —
+# each page is a real, separately-served .html file.
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

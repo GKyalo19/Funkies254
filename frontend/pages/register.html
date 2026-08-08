@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register — Funkies254</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+</head>
+<body>
+  <div class="auth-page">
+    <div class="auth-card">
+      <a class="auth-close" href="/index.html" aria-label="Close">&times;</a>
+      <h1>Register</h1>
+      <p class="subtext">Already have an account? <a href="/pages/login.html">Login</a></p>
+
+      <form id="register-form" novalidate>
+        <div class="field">
+          <label for="institution" class="visually-hidden">Organization / Institution</label>
+          <input type="text" id="institution" name="institution" placeholder="Organization / Institution" required />
+          <span class="error-text"></span>
+        </div>
+        <div class="field">
+          <label for="education_level" class="visually-hidden">Education Level</label>
+          <select id="education_level" name="education_level" required>
+            <option value="high_school">High School</option>
+            <option value="college">College</option>
+          </select>
+          <span class="error-text"></span>
+        </div>
+        <div class="field">
+          <label for="email" class="visually-hidden">Email</label>
+          <input type="email" id="email" name="email" placeholder="Email" required autocomplete="email" />
+          <span class="error-text"></span>
+        </div>
+        <div class="field">
+          <label for="password" class="visually-hidden">Password</label>
+          <input type="password" id="password" name="password" placeholder="Password" required minlength="8" autocomplete="new-password" />
+          <span class="error-text"></span>
+        </div>
+        <p class="form-hint">*Must contain alphanumeric and special characters such as */#&amp;...</p>
+        <div class="field">
+          <label for="confirm_password" class="visually-hidden">Confirm password</label>
+          <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm password" required minlength="8" autocomplete="new-password" />
+          <span class="error-text"></span>
+        </div>
+        <p class="form-hint">*Passwords must match</p>
+        <p class="subtext" style="margin-top:var(--space-4);">
+          <span style="color:var(--color-cyan);font-weight:700;font-size:20px;display:block;">Set Preferences?</span>
+          Customize your feed to know more about events that you are most interested in
+        </p>
+        <button type="submit" class="btn btn-primary" id="register-submit">Register</button>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/js/pages/register.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+# --- Python / Django (backend) ---
+__pycache__/
+*.py[cod]
+*.sqlite3
+.venv/
+venv/
+env/
+*.egg-info/
+staticfiles/
+media/
+backend/.env
+backend/db.sqlite3
+
+# --- Node (if used for tooling) ---
+node_modules/
+
+# --- Environment secrets ---
+.env
+.env.local
+*.env
+
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Coverage / Test artifacts ---
+.coverage
+htmlcov/
+.pytest_cache/
