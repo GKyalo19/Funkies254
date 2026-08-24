@@ -23,11 +23,27 @@ export class ApiError extends Error {
 
 const UNSAFE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
-function readCookie(name) {
-  return document.cookie
-    .split("; ")
-    .find((row) => row.startsWith(`${name}=`))
-    ?.slice(name.length + 1);
+let csrfToken = null;
+
+async function ensureCsrfToken() {
+    if (csrfToken) return csrfToken;
+
+    const response = await fetch(`${API_BASE_URL}/auth/csrf/`, {
+        method: "GET",
+        credentials: "include",
+    });
+
+    if (!response.ok) {
+        throw new ApiError(
+            "Unable to initialize CSRF protection.",
+            response.status
+        );
+    }
+
+    const data = await response.json();
+    csrfToken = data.csrf_token || null;
+
+    return csrfToken;
 }
 
 async function parseBody(response) {
@@ -63,9 +79,12 @@ async function request(path, { method = "GET", body, isFormData = false, allowRe
   // Production runs with JWT_COOKIE_CSRF_ENFORCED=True, so cookie-authenticated
   // writes must echo the csrftoken cookie back as a header.
   if (UNSAFE_METHODS.has(method)) {
-    const csrfToken = readCookie("csrftoken");
-    if (csrfToken) options.headers["X-CSRFToken"] = csrfToken;
-  }
+    const token = await ensureCsrfToken();
+
+    if (token) {
+        options.headers["X-CSRFToken"] = token;
+    }
+}
 
   const response = await fetch(`${API_BASE_URL}${path}`, options);
 
