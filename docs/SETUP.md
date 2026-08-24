@@ -109,14 +109,17 @@ before deploying so:
 1. Go to [supabase.com](https://supabase.com) → **New project** (free tier).
 2. **Database**: Project Settings → Database → copy the **Connection string (URI)** →
    paste it into `backend/.env` as `DATABASE_URL`.
-3. **Storage**: Storage → **New bucket** → name it `funkies254-media` (or update
-   `SUPABASE_STORAGE_BUCKET` to match) → make it **public** (so uploaded event covers/
-   avatars are viewable without extra signed-URL logic).
+3. **Storage**: Storage → **New bucket**, twice:
+   - `event-covers` — public read is fine, since event covers are public content.
+   - `avatars` — public or signed, depending on your final privacy decision.
+
+   Writes are always performed by the backend, never by the browser.
 4. **API keys**: Project Settings → API → copy the **Project URL** into
    `SUPABASE_URL`, and the **service_role key** (not the public `anon` key — the service
    role key is needed to upload files) into `SUPABASE_SERVICE_ROLE_KEY`.
 5. Re-run `python manage.py migrate` once `DATABASE_URL` points at Supabase, so your
-   schema is created there too.
+   schema is created there too, then `python manage.py seed_demo_data` to seed the
+   reference taxonomies.
 
 ⚠️ The service role key bypasses Row Level Security — never expose it to the frontend or
 commit it to git. It only ever lives in `backend/.env` (local) or Render's environment
@@ -124,14 +127,46 @@ variables (deployed).
 
 ---
 
-## 5. Common issues
+## 5. Testing the API with Postman
+
+```bash
+cd backend
+source venv/bin/activate
+python manage.py seed_demo_data     # demo accounts + events
+python manage.py runserver 8000
+```
+
+Import `docs/Funkies254.postman_collection.json`, then run **Auth → Login
+(student)**. Authentication uses httpOnly cookies, and Postman's cookie jar
+stores and replays them automatically, so every request after login is
+authenticated. Log in as a different demo account to switch roles.
+
+All demo accounts use the password `Funkies254!`:
+
+| Email | Role |
+|---|---|
+| `student@funkies254.test` | student |
+| `staff@funkies254.test` | institution_staff |
+| `admin@funkies254.test` | admin |
+| `superadmin@funkies254.test` | super_admin |
+
+Keep `JWT_COOKIE_CSRF_ENFORCED=False` in `backend/.env` while testing locally,
+otherwise every POST/PATCH/DELETE needs an `X-CSRFToken` header. Set it to
+`True` in production.
+
+---
+
+## 6. Common issues
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `pip install` fails building `Pillow` from source | Python version too new for the pinned Pillow release to have a pre-built wheel | Use Python 3.11–3.13, or update the `Pillow` version in `requirements.txt` |
-| Frontend shows "Could not reach the server" toasts | Backend isn't running, or wrong port | Confirm `python manage.py runserver 8000` is running and reachable at `http://127.0.0.1:8000/api/events/` |
+| Frontend shows "Could not reach the server" toasts | Backend isn't running, or wrong port | Confirm `python manage.py runserver 8000` is running and reachable at `http://127.0.0.1:8000/api/health/` |
 | Login "works" but `/api/users/me/` returns 401 right after | Frontend served over a different port than `5500`/CORS mismatch | Update `CORS_ALLOWED_ORIGINS` in `backend/.env` to match your actual frontend origin, restart the backend |
+| Every write returns 403 "CSRF verification failed" | CSRF enforcement is on but no `X-CSRFToken` header is being sent | Set `JWT_COOKIE_CSRF_ENFORCED=False` for local testing, or call `GET /api/auth/csrf/` and echo the token back |
 | Avatar/event image upload fails with 502 | Supabase Storage env vars not set | Follow section 4 above; local dev without Supabase configured will always fail file uploads (everything else still works) |
+| A newly created event doesn't appear in `GET /api/events/` | Staff-created events start unverified and are hidden from students | Verify it as an admin: `POST /api/events/{id}/verify/` |
 
-Next: see `docs/API.md` for the full endpoint reference, and `docs/DEPLOYMENT.md` for
-hosting for free on Netlify + Render.
+Next: see `docs/API.md` for the full endpoint reference, `docs/DATABASE.md` for the
+schema, `docs/SECURITY.md` for the auth/cookie/storage rules, and
+`docs/DEPLOYMENT.md` for hosting for free on Netlify + Render.

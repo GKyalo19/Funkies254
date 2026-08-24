@@ -1,36 +1,82 @@
-from rest_framework import permissions, status, viewsets
-from rest_framework.decorators import action
+"""Institution endpoints — public read, owner/admin write (§9)."""
+
+from django.db.models import Count, Q
+from rest_framework import generics, status
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from apps.common.permissions import IsStaffOrReadOnly
+from apps.common.permissions import IsAdmin, IsInstitutionOwner
+from apps.organizers.models import Institution
+from apps.organizers.serializers import InstitutionSerializer
+from apps.organizers.services import (
+    create_institution,
+    set_institution_verified,
+    update_institution,
+)
 
-from .models import Follow, Organizer
-from .serializers import OrganizerSerializer
+
+def _institution_queryset():
+    return Institution.objects.select_related("created_by").annotate(
+        event_count=Count("events", filter=Q(events__is_verified=True), distinct=True)
+    )
 
 
-class OrganizerViewSet(viewsets.ModelViewSet):
-    """
-    /api/organizers/                 GET (list), POST (staff only)
-    /api/organizers/{slug}/          GET, PATCH/PUT, DELETE (staff only)
-    /api/organizers/{slug}/follow/   POST (follow), DELETE (unfollow)
-    """
+class InstitutionListCreateView(generics.ListCreateAPIView):
+    serializer_class = InstitutionSerializer
+    queryset = _institution_queryset()
+    filterset_fields = ("verified",)
+    search_fields = ("name", "location")
+    ordering_fields = ("name", "created_at")
+    ordering = ("name",)
 
-    # `followers_count` is a model @property (computed via .count()), not a DB
-    # column — annotating a queryset field with the same name would collide
-    # with the property setter-less descriptor, so we deliberately don't.
-    queryset = Organizer.objects.all().order_by("name")
-    serializer_class = OrganizerSerializer
-    permission_classes = [IsStaffOrReadOnly]
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAdmin()]
+        return [AllowAny()]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        institution = create_institution(actor=request.user, **serializer.validated_data)
+        return Response(
+            self.get_serializer(institution).data, status=status.HTTP_201_CREATED
+        )
+
+
+class InstitutionDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = InstitutionSerializer
+    queryset = _institution_queryset()
     lookup_field = "slug"
-    search_fields = ["name", "description"]
+    http_method_names = ("get", "patch", "head", "options")
 
-    @action(detail=True, methods=["post", "delete"], permission_classes=[permissions.IsAuthenticated])
-    def follow(self, request, slug=None):
-        organizer = self.get_object()
+    def get_permissions(self):
+        if self.request.method in ("PATCH", "PUT"):
+            return [IsAuthenticated(), IsInstitutionOwner()]
+        return [AllowAny()]
 
-        if request.method == "POST":
-            Follow.objects.get_or_create(user=request.user, organizer=organizer)
-            return Response({"detail": f"Now following {organizer.name}."}, status=status.HTTP_200_OK)
+    def update(self, request, *args, **kwargs):
+        institution = self.get_object()
+        serializer = self.get_serializer(institution, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        institution = update_institution(
+            actor=request.user, institution=institution, **serializer.validated_data
+        )
+        return Response(self.get_serializer(institution).data)
 
-        Follow.objects.filter(user=request.user, organizer=organizer).delete()
-        return Response({"detail": f"Unfollowed {organizer.name}."}, status=status.HTTP_200_OK)
+
+class InstitutionVerifyView(APIView):
+    """Admin verification action (§10.4)."""
+
+    permission_classes = (IsAdmin,)
+
+    def post(self, request, slug):
+        institution = generics.get_object_or_404(Institution, slug=slug)
+        verified = request.data.get("verified", True)
+        if isinstance(verified, str):
+            verified = verified.lower() not in ("false", "0", "no")
+        set_institution_verified(
+            actor=request.user, institution=institution, verified=bool(verified)
+        )
+        institution = _institution_queryset().get(pk=institution.pk)
+        return Response(InstitutionSerializer(institution).data)

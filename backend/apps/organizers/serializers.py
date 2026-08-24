@@ -1,23 +1,53 @@
+"""Institution serializers."""
+
 from rest_framework import serializers
 
-from .models import Organizer
+from apps.organizers.models import Institution
+from apps.users.serializers import UserBriefSerializer
 
 
-class OrganizerSerializer(serializers.ModelSerializer):
-    followers_count = serializers.IntegerField(read_only=True)
-    is_following = serializers.SerializerMethodField()
+class InstitutionBriefSerializer(serializers.ModelSerializer):
+    """Nested representation used inside event payloads."""
 
     class Meta:
-        model = Organizer
-        fields = [
-            "id", "name", "slug", "logo_url", "description", "website",
-            "contact_email", "contact_phone", "years_hosting", "followers_count", "is_following",
-        ]
-        read_only_fields = ["id", "slug"]
+        model = Institution
+        fields = ("id", "name", "slug", "logo_url", "location", "verified")
+        read_only_fields = fields
 
-    def get_is_following(self, obj):
-        request = self.context.get("request")
-        user = getattr(request, "user", None)
-        if not user or not user.is_authenticated:
-            return False
-        return obj.followers.filter(user=user).exists()
+
+class InstitutionSerializer(serializers.ModelSerializer):
+    created_by = UserBriefSerializer(read_only=True)
+    event_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Institution
+        fields = (
+            "id",
+            "name",
+            "slug",
+            "email",
+            "phone",
+            "logo_url",
+            "location",
+            "website",
+            "verified",
+            "created_by",
+            "event_count",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "slug",
+            "verified",
+            "created_by",
+            "event_count",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Name cannot be blank.")
+        return value

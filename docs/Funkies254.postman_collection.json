@@ -1,0 +1,781 @@
+{
+  "info": {
+    "name": "Funkies254 API",
+    "description": "Funkies254 backend (Django + DRF + Supabase).\n\nAuthentication uses httpOnly JWT cookies. Run 'Auth > Login (student)' first — Postman's cookie jar stores the cookies and replays them on every later request. Log in as a different demo account to switch roles.\n\nDemo accounts (after `python manage.py seed_demo_data`), all with password Funkies254!:\n- student@funkies254.test (student)\n- staff@funkies254.test (institution_staff)\n- admin@funkies254.test (admin)\n- superadmin@funkies254.test (super_admin)\n\nSeveral requests store ids into collection variables ({{event_id}}, {{event_slug}}, etc.) so the folders can be run in order.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string" },
+    { "key": "password", "value": "Funkies254!", "type": "string" },
+    { "key": "event_id", "value": "", "type": "string" },
+    { "key": "event_slug", "value": "", "type": "string" },
+    { "key": "institution_slug", "value": "nairobi-high-school", "type": "string" },
+    { "key": "category_id", "value": "", "type": "string" },
+    { "key": "school_level_id", "value": "", "type": "string" },
+    { "key": "institution_id", "value": "", "type": "string" },
+    { "key": "registration_id", "value": "", "type": "string" },
+    { "key": "user_id", "value": "", "type": "string" },
+    { "key": "csrf_token", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "0. Health & reference data",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/health/", "host": ["{{base_url}}"], "path": ["api", "health", ""] }
+          }
+        },
+        {
+          "name": "List categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('categories returned', () => pm.expect(body.length).to.be.above(0));",
+                  "pm.collectionVariables.set('category_id', body[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/categories/", "host": ["{{base_url}}"], "path": ["api", "categories", ""] }
+          }
+        },
+        {
+          "name": "List school levels",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('school_level_id', body[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/school-levels/", "host": ["{{base_url}}"], "path": ["api", "school-levels", ""] }
+          }
+        },
+        {
+          "name": "Get CSRF token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.collectionVariables.set('csrf_token', pm.response.json().csrf_token);"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/auth/csrf/", "host": ["{{base_url}}"], "path": ["api", "auth", "csrf", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Register (new student)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('role is student', () => pm.expect(body.user.role).to.eql('student'));",
+                  "pm.collectionVariables.set('csrf_token', body.csrf_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"postman.student@example.com\",\n  \"name\": \"Postman Student\",\n  \"password\": \"StrongPass!2026\",\n  \"password_confirm\": \"StrongPass!2026\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/register/", "host": ["{{base_url}}"], "path": ["api", "auth", "register", ""] }
+          }
+        },
+        {
+          "name": "Login (student)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('csrf_token', body.csrf_token);",
+                  "pm.test('auth cookie set', () => pm.expect(pm.cookies.has('funkies_access')).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student@funkies254.test\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/login/", "host": ["{{base_url}}"], "path": ["api", "auth", "login", ""] }
+          }
+        },
+        {
+          "name": "Login (institution staff)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"staff@funkies254.test\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/login/", "host": ["{{base_url}}"], "path": ["api", "auth", "login", ""] }
+          }
+        },
+        {
+          "name": "Login (admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@funkies254.test\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/login/", "host": ["{{base_url}}"], "path": ["api", "auth", "login", ""] }
+          }
+        },
+        {
+          "name": "Login (super admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"superadmin@funkies254.test\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/login/", "host": ["{{base_url}}"], "path": ["api", "auth", "login", ""] }
+          }
+        },
+        {
+          "name": "Login (wrong password → 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401 unauthorised', () => pm.response.to.have.status(401));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student@funkies254.test\",\n  \"password\": \"definitely-wrong\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/login/", "host": ["{{base_url}}"], "path": ["api", "auth", "login", ""] }
+          }
+        },
+        {
+          "name": "Refresh token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-CSRFToken", "value": "{{csrf_token}}" }],
+            "url": { "raw": "{{base_url}}/api/auth/token/refresh/", "host": ["{{base_url}}"], "path": ["api", "auth", "token", "refresh", ""] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-CSRFToken", "value": "{{csrf_token}}" }],
+            "url": { "raw": "{{base_url}}/api/auth/logout/", "host": ["{{base_url}}"], "path": ["api", "auth", "logout", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Profile & preferences",
+      "item": [
+        {
+          "name": "Get my profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.collectionVariables.set('user_id', pm.response.json().id);"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/users/me/", "host": ["{{base_url}}"], "path": ["api", "users", "me", ""] }
+          }
+        },
+        {
+          "name": "Update my profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Amina Wanjiru\"\n}" },
+            "url": { "raw": "{{base_url}}/api/users/me/", "host": ["{{base_url}}"], "path": ["api", "users", "me", ""] }
+          }
+        },
+        {
+          "name": "Upload my avatar (multipart)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "X-CSRFToken", "value": "{{csrf_token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "avatar", "type": "file", "src": [], "description": "Pick a jpeg/png/webp under 5 MB. Requires Supabase Storage credentials." }]
+            },
+            "url": { "raw": "{{base_url}}/api/users/me/", "host": ["{{base_url}}"], "path": ["api", "users", "me", ""] }
+          }
+        },
+        {
+          "name": "Get my preferences",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/preferences/me/", "host": ["{{base_url}}"], "path": ["api", "preferences", "me", ""] }
+          }
+        },
+        {
+          "name": "Update my preferences",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"school_level_id\": \"{{school_level_id}}\",\n  \"email_notifications\": true,\n  \"push_notifications\": false,\n  \"preferred_category_ids\": [\"{{category_id}}\"]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/preferences/me/", "host": ["{{base_url}}"], "path": ["api", "preferences", "me", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Institutions",
+      "item": [
+        {
+          "name": "List institutions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const results = pm.response.json().results;",
+                  "if (results.length) {",
+                  "  pm.collectionVariables.set('institution_id', results[0].id);",
+                  "  pm.collectionVariables.set('institution_slug', results[0].slug);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/institutions/", "host": ["{{base_url}}"], "path": ["api", "institutions", ""] }
+          }
+        },
+        {
+          "name": "Get institution by slug",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/institutions/{{institution_slug}}/", "host": ["{{base_url}}"], "path": ["api", "institutions", "{{institution_slug}}", ""] }
+          }
+        },
+        {
+          "name": "Create institution (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Kisumu Girls High School\",\n  \"email\": \"events@kisumugirls.ac.ke\",\n  \"phone\": \"+254700222333\",\n  \"location\": \"Kisumu\",\n  \"website\": \"https://kisumugirls.ac.ke\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/institutions/", "host": ["{{base_url}}"], "path": ["api", "institutions", ""] }
+          }
+        },
+        {
+          "name": "Update own institution (staff)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"phone\": \"+254700111222\"\n}" },
+            "url": { "raw": "{{base_url}}/api/institutions/{{institution_slug}}/", "host": ["{{base_url}}"], "path": ["api", "institutions", "{{institution_slug}}", ""] }
+          }
+        },
+        {
+          "name": "Verify institution (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"verified\": true\n}" },
+            "url": { "raw": "{{base_url}}/api/institutions/{{institution_slug}}/verify/", "host": ["{{base_url}}"], "path": ["api", "institutions", "{{institution_slug}}", "verify", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Events",
+      "item": [
+        {
+          "name": "List events",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const results = pm.response.json().results;",
+                  "if (results.length) {",
+                  "  pm.collectionVariables.set('event_id', results[0].id);",
+                  "  pm.collectionVariables.set('event_slug', results[0].slug);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/events/", "host": ["{{base_url}}"], "path": ["api", "events", ""] }
+          }
+        },
+        {
+          "name": "List events (filtered)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/events/?upcoming=true&category=math&school_level=senior-secondary&ordering=start_time",
+              "host": ["{{base_url}}"],
+              "path": ["api", "events", ""],
+              "query": [
+                { "key": "upcoming", "value": "true" },
+                { "key": "category", "value": "math" },
+                { "key": "school_level", "value": "senior-secondary" },
+                { "key": "ordering", "value": "start_time" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/events/?search=chess",
+              "host": ["{{base_url}}"],
+              "path": ["api", "events", ""],
+              "query": [{ "key": "search", "value": "chess" }]
+            }
+          }
+        },
+        {
+          "name": "Get event by slug",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/events/{{event_slug}}/", "host": ["{{base_url}}"], "path": ["api", "events", "{{event_slug}}", ""] }
+          }
+        },
+        {
+          "name": "Create event (staff or admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('event_id', body.id);",
+                  "pm.collectionVariables.set('event_slug', body.slug);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Inter-School Debate Cup\",\n  \"description\": \"Regional debate competition for senior secondary students.\",\n  \"institution_id\": \"{{institution_id}}\",\n  \"start_time\": \"2026-10-15T08:00:00Z\",\n  \"end_time\": \"2026-10-15T16:00:00Z\",\n  \"venue\": \"Main Hall\",\n  \"location\": \"Ngara, Nairobi\",\n  \"school_level_id\": \"{{school_level_id}}\",\n  \"category_ids\": [\"{{category_id}}\"],\n  \"is_virtual\": false\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/events/", "host": ["{{base_url}}"], "path": ["api", "events", ""] }
+          }
+        },
+        {
+          "name": "Create virtual event",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Virtual Debate Masterclass\",\n  \"description\": \"Online masterclass on argument construction.\",\n  \"institution_id\": \"{{institution_id}}\",\n  \"start_time\": \"2026-09-05T15:00:00Z\",\n  \"end_time\": \"2026-09-05T17:00:00Z\",\n  \"is_virtual\": true,\n  \"registration_link\": \"https://meet.example.com/masterclass\",\n  \"school_level_id\": \"{{school_level_id}}\",\n  \"category_ids\": [\"{{category_id}}\"]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/events/", "host": ["{{base_url}}"], "path": ["api", "events", ""] }
+          }
+        },
+        {
+          "name": "Create event with cover image (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-CSRFToken", "value": "{{csrf_token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "Athletics Trials", "type": "text" },
+                { "key": "description", "value": "Track and field trials.", "type": "text" },
+                { "key": "institution_id", "value": "{{institution_id}}", "type": "text" },
+                { "key": "start_time", "value": "2026-11-02T07:00:00Z", "type": "text" },
+                { "key": "end_time", "value": "2026-11-02T17:00:00Z", "type": "text" },
+                { "key": "venue", "value": "Nyayo Stadium", "type": "text" },
+                { "key": "location", "value": "Langata, Nairobi", "type": "text" },
+                { "key": "category_ids", "value": "{{category_id}}", "type": "text" },
+                { "key": "cover_image", "type": "file", "src": [], "description": "jpeg/png/webp under 5 MB. Requires Supabase Storage credentials." }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/api/events/", "host": ["{{base_url}}"], "path": ["api", "events", ""] }
+          }
+        },
+        {
+          "name": "Create event (invalid dates → 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('400 bad request', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Impossible Event\",\n  \"description\": \"Ends before it starts.\",\n  \"start_time\": \"2026-10-15T16:00:00Z\",\n  \"end_time\": \"2026-10-15T08:00:00Z\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/events/", "host": ["{{base_url}}"], "path": ["api", "events", ""] }
+          }
+        },
+        {
+          "name": "List my own events (staff)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/events/?mine=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "events", ""],
+              "query": [{ "key": "mine", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Update event (owner or admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"venue\": \"School Auditorium\"\n}" },
+            "url": { "raw": "{{base_url}}/api/events/{{event_slug}}/", "host": ["{{base_url}}"], "path": ["api", "events", "{{event_slug}}", ""] }
+          }
+        },
+        {
+          "name": "Verify event (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"verified\": true\n}" },
+            "url": { "raw": "{{base_url}}/api/events/{{event_id}}/verify/", "host": ["{{base_url}}"], "path": ["api", "events", "{{event_id}}", "verify", ""] }
+          }
+        },
+        {
+          "name": "List registrations for event (owner or admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/events/{{event_id}}/registrations/", "host": ["{{base_url}}"], "path": ["api", "events", "{{event_id}}", "registrations", ""] }
+          }
+        },
+        {
+          "name": "Delete event (owner or admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "X-CSRFToken", "value": "{{csrf_token}}" }],
+            "url": { "raw": "{{base_url}}/api/events/{{event_slug}}/", "host": ["{{base_url}}"], "path": ["api", "events", "{{event_slug}}", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Saved events (student)",
+      "item": [
+        {
+          "name": "Save event",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-CSRFToken", "value": "{{csrf_token}}" }],
+            "url": { "raw": "{{base_url}}/api/events/{{event_id}}/save/", "host": ["{{base_url}}"], "path": ["api", "events", "{{event_id}}", "save", ""] }
+          }
+        },
+        {
+          "name": "Save event again (idempotent → already_saved)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "pm.test('already saved', () => pm.expect(pm.response.json().already_saved).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-CSRFToken", "value": "{{csrf_token}}" }],
+            "url": { "raw": "{{base_url}}/api/events/{{event_id}}/save/", "host": ["{{base_url}}"], "path": ["api", "events", "{{event_id}}", "save", ""] }
+          }
+        },
+        {
+          "name": "List my saved events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/users/me/saved-events/", "host": ["{{base_url}}"], "path": ["api", "users", "me", "saved-events", ""] }
+          }
+        },
+        {
+          "name": "Unsave event",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "X-CSRFToken", "value": "{{csrf_token}}" }],
+            "url": { "raw": "{{base_url}}/api/events/{{event_id}}/save/", "host": ["{{base_url}}"], "path": ["api", "events", "{{event_id}}", "save", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Registrations",
+      "item": [
+        {
+          "name": "Register for event (student)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.collectionVariables.set('registration_id', pm.response.json().id);"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"event_id\": \"{{event_id}}\"\n}" },
+            "url": { "raw": "{{base_url}}/api/registrations/", "host": ["{{base_url}}"], "path": ["api", "registrations", ""] }
+          }
+        },
+        {
+          "name": "Register again (duplicate → 409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('409 conflict', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"event_id\": \"{{event_id}}\"\n}" },
+            "url": { "raw": "{{base_url}}/api/registrations/", "host": ["{{base_url}}"], "path": ["api", "registrations", ""] }
+          }
+        },
+        {
+          "name": "List my registrations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/users/me/registrations/", "host": ["{{base_url}}"], "path": ["api", "users", "me", "registrations", ""] }
+          }
+        },
+        {
+          "name": "Get registration",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/registrations/{{registration_id}}/", "host": ["{{base_url}}"], "path": ["api", "registrations", "{{registration_id}}", ""] }
+          }
+        },
+        {
+          "name": "Cancel my registration",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-CSRFToken", "value": "{{csrf_token}}" }],
+            "url": { "raw": "{{base_url}}/api/registrations/{{registration_id}}/cancel/", "host": ["{{base_url}}"], "path": ["api", "registrations", "{{registration_id}}", "cancel", ""] }
+          }
+        },
+        {
+          "name": "Mark attendance (event owner or admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"attended\"\n}" },
+            "url": { "raw": "{{base_url}}/api/registrations/{{registration_id}}/status/", "host": ["{{base_url}}"], "path": ["api", "registrations", "{{registration_id}}", "status", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Recommendations",
+      "item": [
+        {
+          "name": "Feed (anonymous or signed in)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/recommendations/feed/?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recommendations", "feed", ""],
+              "query": [{ "key": "limit", "value": "10" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Administration",
+      "item": [
+        {
+          "name": "List users (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/?role=student",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", ""],
+              "query": [{ "key": "role", "value": "student" }]
+            }
+          }
+        },
+        {
+          "name": "Suspend user (admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-CSRFToken", "value": "{{csrf_token}}" }],
+            "url": { "raw": "{{base_url}}/api/users/{{user_id}}/suspend/", "host": ["{{base_url}}"], "path": ["api", "users", "{{user_id}}", "suspend", ""] }
+          }
+        },
+        {
+          "name": "Reinstate user (admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-CSRFToken", "value": "{{csrf_token}}" }],
+            "url": { "raw": "{{base_url}}/api/users/{{user_id}}/reinstate/", "host": ["{{base_url}}"], "path": ["api", "users", "{{user_id}}", "reinstate", ""] }
+          }
+        },
+        {
+          "name": "Change user role (admin / super admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"institution_staff\"\n}" },
+            "url": { "raw": "{{base_url}}/api/users/{{user_id}}/role/", "host": ["{{base_url}}"], "path": ["api", "users", "{{user_id}}", "role", ""] }
+          }
+        },
+        {
+          "name": "Activity log (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/activity-logs/", "host": ["{{base_url}}"], "path": ["api", "admin", "activity-logs", ""] }
+          }
+        }
+      ]
+    }
+  ]
+}

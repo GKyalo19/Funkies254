@@ -1,11 +1,14 @@
+"""Registration admin (§17)."""
+
 from django.contrib import admin
 
-from .models import Registration
+from apps.registrations.models import EventRegistration
 
 
-@admin.register(Registration)
-class RegistrationAdmin(admin.ModelAdmin):
-    list_display = ["user", "event", "status", "registered_at"]
-    list_filter = ["status"]
-    search_fields = ["user__email", "event__title"]
-    autocomplete_fields = ["user", "event"]
+@admin.register(EventRegistration)
+class EventRegistrationAdmin(admin.ModelAdmin):
+    list_display = ("event", "user", "status", "registered_at")
+    list_filter = ("status", "event__institution")
+    search_fields = ("user__email", "user__name", "event__title")
+    autocomplete_fields = ("user", "event")
+    readonly_fields = ("id", "registered_at")

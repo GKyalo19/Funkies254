@@ -1,4 +1,5 @@
-"""WSGI entrypoint used by gunicorn on Render (and any WSGI-compatible host)."""
+"""WSGI entrypoint — used by Gunicorn on Render."""
+
 import os
 
 from django.core.wsgi import get_wsgi_application

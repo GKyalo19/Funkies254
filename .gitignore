@@ -6,7 +6,8 @@ __pycache__/
 venv/
 env/
 *.egg-info/
-staticfiles/
+staticfiles/*
+!staticfiles/.gitkeep
 media/
 backend/.env
 backend/db.sqlite3

@@ -1,9 +1,29 @@
-from rest_framework.routers import DefaultRouter
+"""Routes mounted under /api/."""
 
-from .views import CategoryViewSet, EventViewSet
+from django.urls import path
 
-router = DefaultRouter()
-router.register("categories", CategoryViewSet, basename="category")
-router.register("", EventViewSet, basename="event")
+from apps.events.views import (
+    CategoryListView,
+    EventDetailView,
+    EventListCreateView,
+    EventRegistrationListView,
+    EventSaveView,
+    EventVerifyView,
+    SavedEventListView,
+    SchoolLevelListView,
+)
 
-urlpatterns = router.urls
+urlpatterns = [
+    path("categories/", CategoryListView.as_view(), name="category-list"),
+    path("school-levels/", SchoolLevelListView.as_view(), name="school-level-list"),
+    path("events/", EventListCreateView.as_view(), name="event-list"),
+    path("users/me/saved-events/", SavedEventListView.as_view(), name="saved-event-list"),
+    path("events/<str:identifier>/save/", EventSaveView.as_view(), name="event-save"),
+    path("events/<str:identifier>/verify/", EventVerifyView.as_view(), name="event-verify"),
+    path(
+        "events/<str:identifier>/registrations/",
+        EventRegistrationListView.as_view(),
+        name="event-registration-list",
+    ),
+    path("events/<str:identifier>/", EventDetailView.as_view(), name="event-detail"),
+]

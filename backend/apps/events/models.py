@@ -1,26 +1,37 @@
+"""
+Event domain models (§4.3 – §4.7).
+
+Category and SchoolLevel are reference taxonomies stored as rows so the
+taxonomy can evolve without a migration (§4.3, §18).
+"""
+
 from django.conf import settings
 from django.db import models
-from django.utils import timezone
 from django.utils.text import slugify
 
-from apps.organizers.models import Organizer
-from apps.users.models import EducationLevel
+from apps.common.models import TimeStampedModel, UUIDPrimaryKeyModel
 
 
-class Category(models.Model):
-    """
-    A single flat taxonomy shared by events, user preferences, and listing
-    filters — covers both academic subjects (Math, Science, Literature) and
-    activity types (Sports, Volleyball, Rugby) seen in the Figma designs.
-    """
-
-    name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(max_length=120, unique=True, blank=True)
-    icon = models.CharField(max_length=50, blank=True, help_text="Icon identifier used by the frontend, e.g. an iconify name.")
+class SchoolLevel(UUIDPrimaryKeyModel):
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=120, unique=True)
 
     class Meta:
-        ordering = ["name"]
+        db_table = "school_levels"
+        ordering = ("name",)
+
+    def __str__(self):
+        return self.name
+
+
+class Category(UUIDPrimaryKeyModel):
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=120, unique=True)
+
+    class Meta:
+        db_table = "categories"
         verbose_name_plural = "categories"
+        ordering = ("name",)
 
     def __str__(self):
         return self.name
@@ -31,59 +42,131 @@ class Category(models.Model):
         super().save(*args, **kwargs)
 
 
-class EventStatus(models.TextChoices):
-    DRAFT = "draft", "Draft"
-    PUBLISHED = "published", "Published"
-    CANCELLED = "cancelled", "Cancelled"
+class EventQuerySet(models.QuerySet):
+    def with_related(self):
+        return self.select_related("institution", "school_level", "created_by").prefetch_related(
+            "categories"
+        )
+
+    def verified(self):
+        return self.filter(is_verified=True)
+
+    def upcoming(self):
+        from django.utils import timezone
+
+        return self.filter(end_time__gte=timezone.now())
+
+    def visible_to(self, user):
+        """
+        Curation visibility.
+
+        Anonymous visitors and students see verified events only. Institution
+        staff additionally see their own institution's drafts, and admins see
+        everything.
+        """
+        from apps.common.enums import UserRole
+
+        if not user or not user.is_authenticated:
+            return self.verified()
+        role = getattr(user, "role", None)
+        if role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
+            return self
+        if role == UserRole.INSTITUTION_STAFF:
+            own = models.Q(created_by=user)
+            if user.institution_id:
+                own |= models.Q(institution_id=user.institution_id)
+            return self.filter(models.Q(is_verified=True) | own)
+        return self.verified()
 
 
-class Event(models.Model):
-    """A single event listing — the core content of the whole platform."""
+class Event(UUIDPrimaryKeyModel, TimeStampedModel):
+    """
+    Curated student event.
 
-    title = models.CharField(max_length=255)
-    slug = models.SlugField(max_length=280, unique=True, blank=True)
-    organizer = models.ForeignKey(Organizer, on_delete=models.CASCADE, related_name="events")
-    categories = models.ManyToManyField(Category, related_name="events", blank=True)
+    Students never create events; only institution staff and admins do (§1.1).
+    """
 
-    short_description = models.CharField(
-        max_length=255, blank=True, help_text="Shown on event cards. Falls back to a trimmed description."
+    title = models.CharField(max_length=250)
+    slug = models.SlugField(
+        max_length=280,
+        unique=True,
+        help_text="URL identifier used by GET /api/events/{slug}/.",
     )
     description = models.TextField()
-
-    education_level = models.CharField(
-        max_length=20, choices=EducationLevel.choices, default=EducationLevel.BOTH,
-        help_text="Who this event targets — used for both filtering and recommendations.",
+    institution = models.ForeignKey(
+        "organizers.Institution",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="events",
+        db_column="institution_id",
     )
-
-    venue_name = models.CharField(max_length=255)
-    address = models.CharField(max_length=500, blank=True)
-    location = models.CharField(max_length=120, help_text="City/region, e.g. 'Nairobi'. Used for the location filter.")
-
-    start_datetime = models.DateTimeField()
-    end_datetime = models.DateTimeField(null=True, blank=True)
-
-    registration_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="0 means free.")
-    capacity = models.PositiveIntegerField(null=True, blank=True, help_text="Leave blank for unlimited.")
-    external_registration_url = models.URLField(
-        blank=True, help_text="Optional — if set, 'Register' sends users here instead of registering in-platform."
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    venue = models.CharField(max_length=250, null=True, blank=True)
+    location = models.TextField(null=True, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    school_level = models.ForeignKey(
+        SchoolLevel,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="events",
+        db_column="school_level_id",
     )
-
-    cover_image_url = models.URLField(blank=True, help_text="Public Supabase Storage URL.")
-    is_featured = models.BooleanField(default=False, help_text="Curator boost — featured events rank higher in the feed.")
-    status = models.CharField(max_length=20, choices=EventStatus.choices, default=EventStatus.PUBLISHED)
-
+    categories = models.ManyToManyField(
+        Category, through="EventCategory", related_name="events", blank=True
+    )
+    cover_image_url = models.TextField(
+        null=True, blank=True, help_text="Supabase Storage URL for the cover image."
+    )
+    registration_link = models.URLField(max_length=500, null=True, blank=True)
+    is_verified = models.BooleanField(default=False)
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="events_verified",
+        db_column="verified_by",
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    is_virtual = models.BooleanField(default=False)
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="events_created"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="events_created",
+        db_column="created_by",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = EventQuerySet.as_manager()
 
     class Meta:
-        ordering = ["start_datetime"]
+        db_table = "events"
+        ordering = ("start_time",)
         indexes = [
-            models.Index(fields=["start_datetime"]),
-            models.Index(fields=["location"]),
-            models.Index(fields=["status"]),
+            models.Index(fields=["start_time"], name="events_start_time_idx"),
+            models.Index(fields=["end_time"], name="events_end_time_idx"),
+            models.Index(fields=["is_verified"], name="events_is_verified_idx"),
+            models.Index(fields=["institution"], name="events_institution_idx"),
+            models.Index(fields=["school_level"], name="events_school_level_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(end_time__gt=models.F("start_time")),
+                name="event_end_time_after_start_time",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(latitude__isnull=True)
+                | models.Q(latitude__gte=-90, latitude__lte=90),
+                name="event_latitude_in_range",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(longitude__isnull=True)
+                | models.Q(longitude__gte=-180, longitude__lte=180),
+                name="event_longitude_in_range",
+            ),
         ]
 
     def __str__(self):
@@ -91,29 +174,74 @@ class Event(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            base_slug = slugify(self.title)
-            slug = base_slug
-            suffix = 1
-            while Event.objects.filter(slug=slug).exclude(pk=self.pk).exists():
-                suffix += 1
-                slug = f"{base_slug}-{suffix}"
-            self.slug = slug
+            self.slug = self.generate_unique_slug(self.title)
         super().save(*args, **kwargs)
 
-    @property
-    def is_free(self):
-        return self.registration_fee == 0
+    @classmethod
+    def generate_unique_slug(cls, value: str) -> str:
+        base = slugify(value)[:250] or "event"
+        slug = base
+        suffix = 2
+        while cls.objects.filter(slug=slug).exists():
+            slug = f"{base}-{suffix}"
+            suffix += 1
+        return slug
 
-    @property
-    def is_past(self):
-        return self.start_datetime < timezone.now()
 
-    @property
-    def registrations_count(self):
-        return self.registrations.filter(status="registered").count()
+class EventCategory(UUIDPrimaryKeyModel):
+    """Explicit through table for Event ↔ Category (§4.6)."""
 
-    @property
-    def spots_left(self):
-        if self.capacity is None:
-            return None
-        return max(self.capacity - self.registrations_count, 0)
+    event = models.ForeignKey(
+        Event, on_delete=models.CASCADE, related_name="event_categories", db_column="event_id"
+    )
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.CASCADE,
+        related_name="event_categories",
+        db_column="category_id",
+    )
+
+    class Meta:
+        db_table = "event_categories"
+        verbose_name_plural = "event categories"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("event", "category"), name="unique_event_category"
+            )
+        ]
+        indexes = [
+            models.Index(fields=["event"], name="event_category_event_idx"),
+            models.Index(fields=["category"], name="event_category_cat_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.event_id} · {self.category_id}"
+
+
+class SavedEvent(UUIDPrimaryKeyModel):
+    """A student's bookmark. Uniqueness is enforced by the database (§4.7)."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="saved_events",
+        db_column="user_id",
+    )
+    event = models.ForeignKey(
+        Event, on_delete=models.CASCADE, related_name="saved_by", db_column="event_id"
+    )
+    saved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "saved_events"
+        ordering = ("-saved_at",)
+        constraints = [
+            models.UniqueConstraint(fields=("user", "event"), name="unique_saved_event")
+        ]
+        indexes = [
+            models.Index(fields=["user"], name="saved_event_user_idx"),
+            models.Index(fields=["event"], name="saved_event_event_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} saved {self.event_id}"

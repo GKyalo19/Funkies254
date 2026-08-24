@@ -1,7 +1,9 @@
+"""Routes mounted under /api/."""
+
 from django.urls import path
 
-from .views import FeedView
+from apps.recommendations.views import RecommendationFeedView
 
 urlpatterns = [
-    path("feed/", FeedView.as_view(), name="recommendations-feed"),
+    path("recommendations/feed/", RecommendationFeedView.as_view(), name="recommendation-feed"),
 ]

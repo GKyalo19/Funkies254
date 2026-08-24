@@ -1,4 +1,5 @@
-"""ASGI entrypoint (kept for future async/websocket needs, e.g. live event updates)."""
+"""ASGI entrypoint."""
+
 import os
 
 from django.core.asgi import get_asgi_application

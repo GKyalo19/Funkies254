@@ -1,264 +1,542 @@
-# Funkies254 — API Reference
+# Funkies254 API Reference
 
-Base URL:
-- Local: `http://127.0.0.1:8000/api`
-- Production: `https://<your-render-service>.onrender.com/api`
+Base URL (local): `http://127.0.0.1:8000`
+Base URL (production): `https://<your-service>.onrender.com`
 
-## Conventions
+All requests and responses are JSON unless a file upload is involved, in which
+case use `multipart/form-data`.
 
-- All request/response bodies are JSON, except file uploads (`multipart/form-data`).
-- **Auth is cookie-based.** After login/register, the browser automatically stores
-  `f254_access` and `f254_refresh` as httpOnly cookies and sends them on every
-  subsequent request — you never manually attach a token. When testing with `curl`, use
-  `-c cookies.txt -b cookies.txt` to persist cookies between calls (see examples below).
-- **Errors** always come back in this shape:
-
-  ```json
-  { "error": { "message": "Human-readable summary.", "fields": { "email": ["This field is required."] } } }
-  ```
-  `fields` is `null` for non-validation errors (permission denied, not found, etc).
-- **Pagination**: list endpoints return
-  ```json
-  { "count": 42, "next": "http://.../api/events/?page=2", "previous": null, "results": [...] }
-  ```
-  except `/recommendations/feed/`, which returns `{ "count": N, "results": [...] }` (no
-  page-based pagination — it's always a ranked top-N list).
-- **Permissions legend**: 🌍 anyone · 🔒 logged-in user · 🛠️ staff only.
+A ready-to-import Postman collection lives at
+[`Funkies254.postman_collection.json`](Funkies254.postman_collection.json).
 
 ---
 
-## Auth — `/api/auth/`
+## 1. Authentication model
 
-### `POST /api/auth/register/` 🌍
-Create an account and log in immediately (sets auth cookies).
+Authentication is a Django-issued JWT pair carried in **httpOnly cookies**:
 
-```json
-// Request
-{
-  "email": "student@example.com",
-  "password": "StrongPass123",
-  "confirm_password": "StrongPass123",
-  "institution": "Mang'u High School",
-  "education_level": "high_school"
-}
-```
-`201 Created` → `{ "user": { ...UserSerializer } }`
-
-```bash
-curl -c cookies.txt -X POST http://127.0.0.1:8000/api/auth/register/ \
-  -H "Content-Type: application/json" \
-  -d '{"email":"student@example.com","password":"StrongPass123","confirm_password":"StrongPass123","institution":"Mangu High","education_level":"high_school"}'
-```
-
-### `POST /api/auth/login/` 🌍
-```json
-{ "email": "student@example.com", "password": "StrongPass123" }
-```
-`200 OK` → `{ "user": {...} }`, sets cookies.
-
-### `POST /api/auth/logout/` 🌍
-No body. Clears auth cookies. Always `200 OK`.
-
-### `POST /api/auth/token/refresh/` 🌍
-No body — reads the refresh cookie. Issues a new access (+ rotated refresh) cookie pair.
-The frontend calls this automatically whenever a request returns 401; you rarely need to
-call it manually.
-
-### `POST /api/auth/password-reset/request/` 🌍
-```json
-{ "email": "student@example.com" }
-```
-Always `200 OK` (doesn't reveal whether the email exists). In dev, the reset email is
-printed to the Django server's console (`EMAIL_BACKEND=console`).
-
-### `POST /api/auth/password-reset/confirm/` 🌍
-```json
-{ "uid": "<from emailed link>", "token": "<from emailed link>", "new_password": "NewPass456" }
-```
-`200 OK` on success, `400` if the link is invalid/expired.
-
----
-
-## Users — `/api/users/`
-
-### `GET /api/users/me/` 🔒
-Returns the logged-in user's profile.
-
-```bash
-curl -b cookies.txt http://127.0.0.1:8000/api/users/me/
-```
-
-### `PATCH /api/users/me/` 🔒
-Partial update. Accepts any of `first_name`, `last_name`, `institution`,
-`education_level`, `phone_number`. `email` is read-only.
-
-### `POST /api/users/me/avatar/` 🔒
-`multipart/form-data` with a field named `avatar`. Uploads to Supabase Storage, returns
-the updated user profile.
-
-```bash
-curl -b cookies.txt -X POST http://127.0.0.1:8000/api/users/me/avatar/ \
-  -F "avatar=@/path/to/photo.jpg"
-```
-
----
-
-## Organizers — `/api/organizers/`
-
-### `GET /api/organizers/` 🌍 · `GET /api/organizers/{slug}/` 🌍
-Returns organizer(s) with `followers_count` and (if logged in) `is_following`.
-
-### `POST /api/organizers/` 🛠️ · `PATCH/PUT /api/organizers/{slug}/` 🛠️ · `DELETE /api/organizers/{slug}/` 🛠️
-Manage organizers. Fields: `name`, `logo_url`, `description`, `website`,
-`contact_email`, `contact_phone`, `years_hosting`.
-
-### `POST /api/organizers/{slug}/follow/` 🔒 · `DELETE /api/organizers/{slug}/follow/` 🔒
-Follow / unfollow an organizer. No body needed.
-
----
-
-## Categories — `/api/events/categories/`
-
-### `GET /api/events/categories/` 🌍
-Not paginated — returns the full flat list, e.g.:
-```json
-[{ "id": 1, "name": "Math", "slug": "math", "icon": "mdi:calculator-variant" }, ...]
-```
-
-### `POST /api/events/categories/` 🛠️ · `PATCH/DELETE /api/events/categories/{id}/` 🛠️
-
----
-
-## Events — `/api/events/`
-
-### `GET /api/events/` 🌍
-Filterable, searchable, paginated list. Query params:
-
-| Param | Example | Meaning |
+| Cookie | Contents | Lifetime |
 |---|---|---|
-| `category` | `?category=math` | Category slug (exact match) |
-| `location` | `?location=Nairobi` | Case-insensitive contains |
-| `education_level` | `?education_level=high_school` | `high_school` \| `college` \| `both` |
-| `date_from` / `date_to` | `?date_from=2026-08-01T00:00:00Z` | ISO datetime bounds on `start_datetime` |
-| `fee` | `?fee=free` or `?fee=paid` | Free (`0`) vs. paid events |
-| `is_featured` | `?is_featured=true` | Curator-boosted events |
-| `search` | `?search=math+olympiad` | Full-text-ish search across title/description/venue/location |
-| `ordering` | `?ordering=-start_datetime` | Any of `start_datetime`, `registration_fee`, `created_at` (prefix `-` for descending) |
-| `page` | `?page=2` | Pagination (12 per page by default) |
+| `funkies_access` | Access token | 30 minutes |
+| `funkies_refresh` | Refresh token | 14 days |
 
-Non-staff users only ever see `status=published` events, regardless of filters.
+- Tokens are **never** returned in a response body, so frontend JavaScript
+  cannot read them.
+- `POST /api/auth/login/` and `POST /api/auth/register/` set both cookies.
+- Postman stores and replays these cookies automatically — log in once and every
+  later request in the collection is authenticated.
+- An `Authorization: Bearer <token>` header is also accepted, which is useful
+  for server-to-server calls.
+- When `JWT_COOKIE_CSRF_ENFORCED=True` (the production default), any unsafe
+  request authenticated by cookie must also send an `X-CSRFToken` header whose
+  value comes from `GET /api/auth/csrf/` or the `csrf_token` field returned by
+  login. Keep it `False` for local Postman work.
 
-```bash
-curl "http://127.0.0.1:8000/api/events/?category=math&fee=free&page=1"
-```
+### Roles
 
-### `GET /api/events/{slug}/` 🌍
-Full event detail — includes `organizer` (nested), `spots_left`,
-`registrations_count`, `description`, etc. See `EventDetailSerializer`.
+| Role | Can |
+|---|---|
+| `student` | View events, save, register, edit own profile, manage own preferences |
+| `institution_staff` | Create events, edit own events, view registrations for own events, update own institution |
+| `admin` | View all users/institutions/events, verify institutions and events, suspend users, curate content |
+| `super_admin` | Everything, plus creating and removing admins |
 
-### `GET /api/events/{slug}/similar/` 🌍
-Up to 6 other published, upcoming events sharing a category with this one.
+Registration always creates a `student`. Elevated roles are granted by an
+administrator through `POST /api/users/{id}/role/` or the Django admin.
 
-### `POST /api/events/` 🛠️
+---
+
+## 2. Error format
+
+Every error uses one envelope:
+
 ```json
 {
-  "title": "64th Annual Math Olympiad",
-  "organizer": 1,
-  "categories": [1],
-  "description": "...",
-  "venue_name": "Mang'u High School",
-  "location": "Thika",
-  "education_level": "high_school",
-  "start_datetime": "2026-08-01T09:00:00Z",
-  "registration_fee": "0.00",
-  "capacity": 200,
-  "is_featured": false,
-  "status": "published"
+  "detail": "end_time: End time must be after the start time.",
+  "code": "invalid",
+  "errors": {
+    "end_time": ["End time must be after the start time."]
+  }
 }
 ```
 
-### `PATCH/PUT /api/events/{slug}/` 🛠️ · `DELETE /api/events/{slug}/` 🛠️
+`errors` is present only for field validation failures.
 
-### `POST /api/events/{slug}/cover-image/` 🛠️
-`multipart/form-data`, field `cover_image`. Uploads to Supabase Storage.
+| Status | Meaning |
+|---|---|
+| 400 | Validation or business-rule failure |
+| 401 | Missing, expired or invalid credentials |
+| 403 | Authenticated but not allowed (role or ownership) |
+| 404 | Not found, or not visible to you |
+| 409 | Conflict (duplicate registration, already cancelled) |
+| 502 | Media storage unavailable |
 
----
+Paginated list responses look like:
 
-## Registrations — `/api/registrations/`
-
-### `GET /api/registrations/` 🔒
-Only ever returns the logged-in user's own registrations (including cancelled ones —
-filter client-side on `status` if you only want active ones).
-
-### `POST /api/registrations/` 🔒
 ```json
-{ "event_slug": "64th-annual-math-olympiad" }
+{ "count": 42, "next": "...?page=2", "previous": null, "results": [ ... ] }
 ```
-`201 Created`. Registering twice for the same event updates the existing row instead of
-erroring. Fails with `400` if the event is past, unpublished, or fully booked
-(`capacity` reached).
 
-### `DELETE /api/registrations/{id}/` 🔒
-Cancels (soft-delete — marks `status="cancelled"`, doesn't remove the row).
-`204 No Content`.
+Use `?page=` and `?page_size=` (max 100). `/api/categories/` and
+`/api/school-levels/` are unpaginated.
 
 ---
 
-## Preferences — `/api/preferences/`
+## 3. Auth endpoints
 
-### `GET /api/preferences/me/` 🔒
-Auto-creates a default preference row on first access
-(`education_levels: []`, `categories: []`, `preferred_locations: []`, `max_days_ahead: 30`).
+### `POST /api/auth/register/` — public
 
-### `PATCH /api/preferences/me/` 🔒
 ```json
 {
-  "categories": [1, 4],
-  "education_levels": ["high_school"],
-  "preferred_locations": ["Nairobi", "Thika"],
-  "max_days_ahead": 30
+  "email": "amina@example.com",
+  "name": "Amina Wanjiru",
+  "password": "StrongPass!2026",
+  "password_confirm": "StrongPass!2026",
+  "institution_id": "9f1c...  (optional)"
 }
 ```
 
----
-
-## Recommendations — `/api/recommendations/`
-
-### `GET /api/recommendations/feed/?limit=20` 🌍
-The Home Page feed. Works for anonymous visitors (falls back to featured + soonest
-events); personalised for logged-in users based on their saved preferences, followed
-organizers, and curator `is_featured` flags. See `docs/ARCHITECTURE.md` §3.4 for how
-scoring works. `limit` defaults to 20, capped at 50.
+`201 Created`, sets both cookies, and creates the user's single preference row:
 
 ```json
-{ "count": 9, "results": [ { "id": 3, "title": "...", ... } ] }
+{
+  "user": {
+    "id": "0f6c...",
+    "email": "amina@example.com",
+    "name": "Amina Wanjiru",
+    "role": "student",
+    "avatar_url": null,
+    "institution": null,
+    "is_active": true,
+    "is_staff": false,
+    "created_at": "2026-08-24T10:00:00Z",
+    "updated_at": "2026-08-24T10:00:00Z"
+  },
+  "csrf_token": "…",
+  "detail": "Account created successfully."
+}
+```
+
+Emails are lowercased before storage, so logins are case-insensitive.
+
+### `POST /api/auth/login/` — public
+
+```json
+{ "email": "amina@example.com", "password": "StrongPass!2026" }
+```
+
+`200 OK` with the same body shape as register. `401` for bad credentials
+(`code: invalid_credentials`) and for suspended accounts
+(`code: account_suspended`).
+
+### `POST /api/auth/token/refresh/` — public
+
+No body needed; the refresh cookie is used. The refresh token is rotated and
+the old one blacklisted. `200 OK` sets fresh cookies. `401` if the cookie is
+missing, expired, blacklisted, or the account is no longer active.
+
+### `POST /api/auth/logout/`
+
+Clears both cookies and blacklists the refresh token. Always `200`.
+
+### `GET /api/auth/csrf/` — public
+
+Returns `{"csrf_token": "…"}` and sets the `csrftoken` cookie.
+
+---
+
+## 4. Users
+
+### `GET /api/users/me/` — authenticated
+
+Returns the profile object shown above.
+
+### `PATCH /api/users/me/` — authenticated
+
+Writable: `name`, `avatar` (file upload), and `institution_id` (students only —
+staff ownership is derived from that field, so only an admin may change it for
+non-students). `email`, `role`, `is_active` and `is_staff` are read-only here.
+
+```bash
+curl -X PATCH http://127.0.0.1:8000/api/users/me/ \
+  -b cookies.txt -F "name=Amina W." -F "avatar=@avatar.png"
+```
+
+### `GET /api/users/` — admin
+
+Filters: `?role=`, `?is_active=`, `?institution=`, `?search=` (email or name),
+`?ordering=created_at|email|name|role`.
+
+### `POST /api/users/{id}/suspend/` — admin
+
+Sets `is_active=false`; the account can no longer authenticate and existing
+tokens stop working. Writes a `suspended_user` audit record. An admin cannot
+suspend themselves or another administrator (super admin only).
+
+### `POST /api/users/{id}/reinstate/` — admin
+
+Reverses a suspension and writes `reinstated_user`.
+
+### `POST /api/users/{id}/role/` — admin (super admin for admin roles)
+
+```json
+{ "role": "institution_staff" }
+```
+
+Granting or removing `admin`/`super_admin` requires `super_admin`, and logs
+`created_admin` or `removed_admin`; other changes log `promoted_user`.
+`is_staff`/`is_superuser` are kept in step with the application role.
+
+---
+
+## 5. Preferences
+
+### `GET /api/preferences/me/` — authenticated
+
+```json
+{
+  "id": "5b2e...",
+  "school_level": { "id": "…", "name": "Senior Secondary", "slug": "senior-secondary" },
+  "email_notifications": true,
+  "push_notifications": false,
+  "preferred_categories": [ { "id": "…", "name": "Math", "slug": "math" } ]
+}
+```
+
+### `PATCH /api/preferences/me/` — authenticated
+
+```json
+{
+  "school_level_id": "…",
+  "email_notifications": false,
+  "push_notifications": true,
+  "preferred_category_ids": ["…", "…"]
+}
+```
+
+`preferred_category_ids` replaces the whole selection.
+
+---
+
+## 6. Reference data
+
+### `GET /api/categories/` — public
+
+`[{ "id": "…", "name": "Sports", "slug": "sports" }, …]`
+
+### `GET /api/school-levels/` — public
+
+`[{ "id": "…", "name": "College", "slug": "college" }, …]`
+
+---
+
+## 7. Institutions
+
+### `GET /api/institutions/` — public
+
+Filters: `?verified=true`, `?search=`, `?ordering=name|created_at`.
+
+### `GET /api/institutions/{slug}/` — public
+
+```json
+{
+  "id": "…",
+  "name": "Nairobi High School",
+  "slug": "nairobi-high-school",
+  "email": "events@nairobihigh.ac.ke",
+  "phone": "+254700000001",
+  "logo_url": null,
+  "location": "Ngara, Nairobi",
+  "website": "https://nairobihigh.ac.ke",
+  "verified": true,
+  "created_by": { "id": "…", "name": "Faith Kamau", "email": "…", "role": "admin", "avatar_url": null },
+  "event_count": 4,
+  "created_at": "…",
+  "updated_at": "…"
+}
+```
+
+### `POST /api/institutions/` — admin
+
+`{ "name": "Kisumu Girls High School", "location": "Kisumu", "email": "...", "phone": "...", "website": "..." }`
+
+The slug is generated from the name (collisions get a numeric suffix) and
+`verified` starts as `false`.
+
+### `PATCH /api/institutions/{slug}/` — owning staff or admin
+
+Institution staff may edit only their own institution. `slug` and `verified`
+are read-only here.
+
+### `POST /api/institutions/{slug}/verify/` — admin
+
+Optional body `{ "verified": false }` to withdraw verification. Logs
+`verified_institution`.
+
+---
+
+## 8. Events
+
+Events are curated: students never create them.
+
+### `GET /api/events/` — public
+
+Anonymous visitors and students see verified events only. Institution staff
+additionally see their own institution's unverified drafts; admins see
+everything.
+
+| Parameter | Example |
+|---|---|
+| `category` | `?category=sports&category=math` (slugs, repeatable) |
+| `school_level` | `?school_level=college` |
+| `institution` | `?institution=<uuid>` |
+| `institution_slug` | `?institution_slug=nairobi-high-school` |
+| `is_virtual` | `?is_virtual=true` |
+| `is_verified` | `?is_verified=false` (staff/admin views) |
+| `start_after` / `start_before` | `?start_after=2026-09-01T00:00:00Z` |
+| `upcoming` | `?upcoming=true` hides events that already ended |
+| `search` | `?search=chess` (title, description, venue, location) |
+| `mine` | `?mine=true` restricts to events you created |
+| `ordering` | `?ordering=-start_time` |
+
+### `GET /api/events/{slug}/` — public
+
+`{slug}` also accepts the event UUID.
+
+```json
+{
+  "id": "…",
+  "title": "Nairobi Inter-School Math Olympiad",
+  "slug": "nairobi-inter-school-math-olympiad",
+  "description": "…",
+  "institution": { "id": "…", "name": "Nairobi High School", "slug": "…", "logo_url": null, "location": "Ngara, Nairobi", "verified": true },
+  "start_time": "2026-08-31T08:00:00Z",
+  "end_time": "2026-08-31T14:00:00Z",
+  "venue": "Main Hall",
+  "location": "Ngara, Nairobi",
+  "latitude": null,
+  "longitude": null,
+  "school_level": { "id": "…", "name": "Senior Secondary", "slug": "senior-secondary" },
+  "categories": [ { "id": "…", "name": "Math", "slug": "math" } ],
+  "cover_image_url": null,
+  "registration_link": null,
+  "is_verified": true,
+  "verified_by": null,
+  "verified_at": null,
+  "is_virtual": false,
+  "created_by": { "id": "…", "name": "Brian Otieno", "email": "…", "role": "institution_staff", "avatar_url": null },
+  "is_saved": false,
+  "is_registered": false,
+  "registration_count": 3,
+  "created_at": "…",
+  "updated_at": "…"
+}
+```
+
+### `POST /api/events/` — institution staff or admin
+
+```json
+{
+  "title": "County Chess Championship",
+  "description": "Knockout chess tournament for secondary students.",
+  "institution_id": "…",
+  "start_time": "2026-09-20T08:00:00Z",
+  "end_time": "2026-09-20T16:00:00Z",
+  "venue": "School Library",
+  "location": "Ngara, Nairobi",
+  "latitude": null,
+  "longitude": null,
+  "school_level_id": "…",
+  "category_ids": ["…"],
+  "registration_link": null,
+  "is_virtual": false
+}
+```
+
+Send as `multipart/form-data` with a `cover_image` file to upload a cover to
+Supabase Storage in the same request. `cover_image_url` may also be set
+directly.
+
+Validation:
+
+- `end_time` must be after `start_time` (also a database CHECK constraint).
+- Latitude within ±90, longitude within ±180 (serializer and CHECK constraint).
+- A virtual event may not carry `venue`, `latitude` or `longitude`, and needs a
+  `registration_link`.
+- Institution staff may only attach events to their own institution; omitting
+  `institution_id` fills in theirs automatically.
+
+Events created by staff start unverified and wait for admin review; events
+created by an admin are verified immediately. Logs `created_event`.
+
+### `PATCH /api/events/{slug}/` — owning staff or admin
+
+Same payload, all fields optional. `category_ids` replaces the category set.
+Logs `updated_event`.
+
+### `DELETE /api/events/{slug}/` — owning staff or admin
+
+`204 No Content`. The audit record (`deleted_event`) survives the deletion, and
+the cover image is removed from storage after the transaction commits.
+
+### `POST /api/events/{id}/verify/` — admin
+
+Optional body `{ "verified": false }`. Sets `verified_by`/`verified_at` and
+logs `verified_event`.
+
+### `GET /api/events/{id}/registrations/` — owning staff or admin
+
+Paginated registrations for that event, each with the student attached.
+
+---
+
+## 9. Saved events
+
+### `POST /api/events/{id}/save/` — student
+
+`201` on the first save, `200` with `"already_saved": true` if it was already
+saved. Uniqueness is enforced by a database constraint.
+
+```json
+{ "saved": true, "already_saved": false, "event_id": "…", "saved_at": "…" }
+```
+
+### `DELETE /api/events/{id}/save/` — student
+
+`{ "saved": false, "was_saved": true }`
+
+### `GET /api/users/me/saved-events/` — authenticated
+
+```json
+{ "count": 1, "next": null, "previous": null,
+  "results": [ { "id": "…", "event": { … }, "saved_at": "…" } ] }
 ```
 
 ---
 
-## Quick end-to-end `curl` test script
+## 10. Registrations
 
-```bash
-BASE=http://127.0.0.1:8000/api
+### `POST /api/registrations/` — student
 
-# Register + capture cookies
-curl -s -c cookies.txt -X POST $BASE/auth/register/ \
-  -H "Content-Type: application/json" \
-  -d '{"email":"demo@example.com","password":"DemoPass123","confirm_password":"DemoPass123","institution":"Demo School","education_level":"high_school"}'
-
-# Confirm we're logged in
-curl -s -b cookies.txt $BASE/users/me/
-
-# Browse events
-curl -s "$BASE/events/?page=1" | python3 -m json.tool | head -40
-
-# Register for the first event returned above (replace <slug>)
-curl -s -b cookies.txt -X POST $BASE/registrations/ \
-  -H "Content-Type: application/json" -d '{"event_slug":"<slug>"}'
-
-# See personalised feed
-curl -s -b cookies.txt "$BASE/recommendations/feed/"
-
-# Log out
-curl -s -b cookies.txt -X POST $BASE/auth/logout/
+```json
+{ "event_id": "…" }
 ```
+
+or `{ "event_slug": "county-chess-championship" }`.
+
+`201` on a new registration, `200` if a previously cancelled registration was
+reactivated, `409` if you are already registered, `400` if the event is
+unverified or has already ended. The event row is locked for the duration of
+the transaction, and the unique `(user, event)` constraint is the final guard
+against races.
+
+```json
+{
+  "id": "…",
+  "user": { "id": "…", "name": "Amina Wanjiru", "email": "…", "role": "student", "avatar_url": null },
+  "event": { … },
+  "status": "registered",
+  "registered_at": "…"
+}
+```
+
+### `GET /api/users/me/registrations/` — authenticated
+
+Filter with `?status=registered|attended|cancelled`.
+
+### `GET /api/registrations/{id}/` — owner, event owner or admin
+
+### `POST /api/registrations/{id}/cancel/` — the registered student
+
+Sets `status=cancelled`. `409` if it is already cancelled, `404` if the
+registration is not yours.
+
+### `POST /api/registrations/{id}/status/` — event owner or admin
+
+```json
+{ "status": "attended" }
+```
+
+---
+
+## 11. Recommendations
+
+### `GET /api/recommendations/feed/` — public or authenticated
+
+`?limit=` (default 20, max 50).
+
+```json
+{
+  "count": 3,
+  "personalised": true,
+  "results": [
+    {
+      "score": 7.7,
+      "reasons": [
+        { "rule": "category_overlap", "points": 3.0, "detail": "Matches your interests: chess." },
+        { "rule": "school_level_match", "points": 2.5, "detail": "Targets your school level." },
+        { "rule": "location_match", "points": 2.0, "detail": "Happening near you." }
+      ],
+      "event": { … }
+    }
+  ]
+}
+```
+
+Rules and weights: category overlap (3.0 each, capped at 9.0), school-level
+match (2.5), location match (2.0), own-institution match (1.5) and a
+happening-soon boost that decays from 1.0 to 0 over 14 days. Anonymous visitors
+get the soonest upcoming verified events with `personalised: false`. Ranking is
+deterministic: ties break on start time, then event id.
+
+---
+
+## 12. Admin activity log
+
+### `GET /api/admin/activity-logs/` — admin
+
+Filters: `?action=`, `?table_name=`, `?record_id=`, `?user=`,
+`?ordering=-created_at`.
+
+```json
+{
+  "id": "…",
+  "actor": { "id": "…", "name": "Faith Kamau", "email": "…", "role": "admin" },
+  "action": "verified_institution",
+  "table_name": "institutions",
+  "record_id": "…",
+  "created_at": "…"
+}
+```
+
+Actions: `created_event`, `updated_event`, `deleted_event`, `verified_event`,
+`created_institution`, `updated_institution`, `verified_institution`,
+`promoted_user`, `suspended_user`, `reinstated_user`, `created_admin`,
+`removed_admin`.
+
+---
+
+## 13. Health
+
+### `GET /api/health/` — public
+
+`{ "status": "ok", "service": "funkies254-api" }`
+
+---
+
+## 14. Postman quick start
+
+1. `python manage.py seed_demo_data` — creates demo accounts, all with the
+   password `Funkies254!`:
+
+   | Email | Role |
+   |---|---|
+   | `student@funkies254.test` | student |
+   | `staff@funkies254.test` | institution_staff |
+   | `admin@funkies254.test` | admin |
+   | `superadmin@funkies254.test` | super_admin |
+
+2. `python manage.py runserver`
+3. Import `docs/Funkies254.postman_collection.json`.
+4. Run **Auth → Login (student)**. Postman keeps the cookies, so every later
+   request is authenticated. Log in as a different account to switch roles.

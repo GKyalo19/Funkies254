@@ -1,176 +1,205 @@
-from django.conf import settings
-from django.core.mail import send_mail
-from django.utils.encoding import force_bytes
-from django.utils.http import urlsafe_base64_encode
-from rest_framework import generics, permissions, status
+"""Authentication and user endpoints (§9)."""
+
+from django.middleware.csrf import get_token
+from rest_framework import generics, status
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.common.supabase_storage import SupabaseStorageError, upload_file
-
-from .authentication import clear_auth_cookies, set_auth_cookies
-from .models import User
-from .serializers import (
+from apps.common.enums import ADMIN_ROLES
+from apps.common.permissions import IsAdmin
+from apps.users import tokens as token_service
+from apps.users.models import User
+from apps.users.serializers import (
     LoginSerializer,
-    PasswordResetConfirmSerializer,
-    PasswordResetRequestSerializer,
     RegisterSerializer,
+    RoleChangeSerializer,
+    UserAdminSerializer,
     UserSerializer,
 )
-from .tokens import password_reset_token
+from apps.users.services import change_user_role, set_user_active
 
 
-def _issue_tokens_response(user, status_code):
-    """Shared by register + login: build the user payload and set cookies."""
-    refresh = RefreshToken.for_user(user)
-    response = Response({"user": UserSerializer(user).data}, status=status_code)
-    set_auth_cookies(response, access_token=refresh.access_token, refresh_token=refresh)
-    return response
+def _authenticated_response(request, user, *, status_code=status.HTTP_200_OK, detail=None):
+    """Serialise the user, attach auth cookies and seed the CSRF cookie."""
+    payload = {
+        "user": UserSerializer(user, context={"request": request}).data,
+        # Lets a cookie-authenticated frontend send X-CSRFToken on its next write.
+        "csrf_token": get_token(request),
+    }
+    if detail:
+        payload["detail"] = detail
+
+    response = Response(payload, status=status_code)
+    refresh, access = token_service.issue_tokens(user)
+    return token_service.set_auth_cookies(response, access, refresh)
 
 
-class RegisterView(generics.CreateAPIView):
-    """POST /api/auth/register/ — creates the account and logs the user in immediately."""
+class CsrfTokenView(APIView):
+    """Hands the frontend a CSRF token/cookie before its first write request."""
 
-    serializer_class = RegisterSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
+    def get(self, request):
+        return Response({"csrf_token": get_token(request)})
+
+
+class RegisterView(APIView):
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        return _issue_tokens_response(user, status.HTTP_201_CREATED)
-
-
-class LoginView(APIView):
-    """POST /api/auth/login/"""
-
-    permission_classes = [permissions.AllowAny]
-
-    def post(self, request):
-        serializer = LoginSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        return _issue_tokens_response(serializer.validated_data["user"], status.HTTP_200_OK)
-
-
-class LogoutView(APIView):
-    """POST /api/auth/logout/ — blacklisting isn't enabled, so we just clear cookies client-side."""
-
-    permission_classes = [permissions.AllowAny]
-
-    def post(self, request):
-        response = Response({"detail": "Logged out."}, status=status.HTTP_200_OK)
-        clear_auth_cookies(response)
-        return response
-
-
-class RefreshView(APIView):
-    """
-    POST /api/auth/token/refresh/
-
-    Reads the refresh cookie (never sent from JS), issues a fresh access
-    (and rotated refresh) token pair, and re-sets both cookies. The frontend
-    calls this whenever an API request comes back 401.
-    """
-
-    permission_classes = [permissions.AllowAny]
-
-    def post(self, request):
-        raw_refresh = request.COOKIES.get(settings.REFRESH_TOKEN_COOKIE)
-        if not raw_refresh:
-            return Response({"detail": "No refresh token cookie found."}, status=status.HTTP_401_UNAUTHORIZED)
-
-        try:
-            refresh = RefreshToken(raw_refresh)
-            new_access = refresh.access_token
-        except TokenError:
-            response = Response({"detail": "Refresh token is invalid or expired."}, status=status.HTTP_401_UNAUTHORIZED)
-            clear_auth_cookies(response)
-            return response
-
-        response = Response({"detail": "Token refreshed."}, status=status.HTTP_200_OK)
-        set_auth_cookies(response, access_token=new_access, refresh_token=refresh)
-        return response
-
-
-class PasswordResetRequestView(APIView):
-    """
-    POST /api/auth/password-reset/request/
-
-    Always responds with 200 regardless of whether the email exists, so an
-    attacker can't use this endpoint to discover which emails are registered.
-    """
-
-    permission_classes = [permissions.AllowAny]
-
-    def post(self, request):
-        serializer = PasswordResetRequestSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data["email"].strip().lower()
-
-        user = User.objects.filter(email=email).first()
-        if user is not None:
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            token = password_reset_token.make_token(user)
-            reset_link = f"{settings.FRONTEND_BASE_URL}/pages/reset-password.html?uid={uid}&token={token}"
-            send_mail(
-                subject="Reset your Funkies254 password",
-                message=(
-                    f"Hi {user.full_name},\n\n"
-                    f"Click the link below to reset your password. This link expires soon.\n\n"
-                    f"{reset_link}\n\n"
-                    "If you didn't request this, you can safely ignore this email."
-                ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[user.email],
-            )
-
-        return Response(
-            {"detail": "If that email is registered, a reset link has been sent."},
-            status=status.HTTP_200_OK,
+        return _authenticated_response(
+            request,
+            user,
+            status_code=status.HTTP_201_CREATED,
+            detail="Account created successfully.",
         )
 
 
-class PasswordResetConfirmView(APIView):
-    """POST /api/auth/password-reset/confirm/ — takes the uid+token from the emailed link."""
-
-    permission_classes = [permissions.AllowAny]
+class LoginView(APIView):
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
 
     def post(self, request):
-        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer = LoginSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data["user"]
-        user.set_password(serializer.validated_data["new_password"])
-        user.save(update_fields=["password"])
-        return Response({"detail": "Password reset. You can now log in."}, status=status.HTTP_200_OK)
+        return _authenticated_response(
+            request, serializer.validated_data["user"], detail="Login successful."
+        )
+
+
+class TokenRefreshView(APIView):
+    """Rotates the refresh token and re-issues both cookies."""
+
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+
+    def post(self, request):
+        raw_refresh = token_service.read_refresh_token(request)
+        if not raw_refresh:
+            return Response(
+                {"detail": "No refresh token was provided.", "code": "no_refresh_token"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        try:
+            refresh = RefreshToken(raw_refresh)
+            access = refresh.access_token
+        except TokenError:
+            response = Response(
+                {"detail": "Refresh token is invalid or expired.", "code": "invalid_refresh_token"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+            return token_service.clear_auth_cookies(response)
+
+        rotated = None
+        if refresh.token_type == "refresh":
+            token_service.blacklist_refresh_token(raw_refresh)
+            user = User.objects.filter(pk=refresh.payload.get("user_id")).first()
+            if user is None or not user.is_active:
+                response = Response(
+                    {"detail": "Account is no longer active.", "code": "inactive_account"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+                return token_service.clear_auth_cookies(response)
+            rotated, access = token_service.issue_tokens(user)
+
+        response = Response({"detail": "Token refreshed."})
+        return token_service.set_auth_cookies(response, access, rotated)
+
+
+class LogoutView(APIView):
+    """Clears the cookies and blacklists the refresh token."""
+
+    permission_classes = (AllowAny,)
+
+    def post(self, request):
+        token_service.blacklist_refresh_token(token_service.read_refresh_token(request))
+        response = Response({"detail": "Logged out."})
+        return token_service.clear_auth_cookies(response)
 
 
 class MeView(generics.RetrieveUpdateAPIView):
-    """GET/PATCH /api/users/me/ — the logged-in user's own profile."""
+    """GET/PATCH the authenticated user's own profile."""
 
     serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
+    http_method_names = ("get", "patch", "head", "options")
 
     def get_object(self):
         return self.request.user
 
 
-class AvatarUploadView(APIView):
-    """POST /api/users/me/avatar/ — multipart file upload, stored in Supabase Storage."""
+class UserListView(generics.ListAPIView):
+    """Administrative account listing (§14)."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = UserAdminSerializer
+    permission_classes = (IsAdmin,)
+    queryset = User.objects.select_related("institution").all()
+    filterset_fields = ("role", "is_active", "institution")
+    search_fields = ("email", "name")
+    ordering_fields = ("created_at", "email", "name", "role")
+    ordering = ("-created_at",)
 
-    def post(self, request):
-        file_obj = request.FILES.get("avatar")
-        if not file_obj:
-            return Response({"detail": "No file provided under the 'avatar' field."}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            public_url = upload_file(file_obj, folder="users/avatars")
-        except SupabaseStorageError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+class UserSuspendView(APIView):
+    """Suspend an account so future authentication is rejected (§10.5)."""
 
-        request.user.avatar_url = public_url
-        request.user.save(update_fields=["avatar_url"])
-        return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
+    permission_classes = (IsAdmin,)
+
+    def post(self, request, pk):
+        user = generics.get_object_or_404(User, pk=pk)
+        self._guard(request, user)
+        set_user_active(actor=request.user, user=user, is_active=False)
+        return Response(UserAdminSerializer(user).data)
+
+    def _guard(self, request, user):
+        from rest_framework.exceptions import PermissionDenied
+
+        if user.id == request.user.id:
+            raise PermissionDenied("You cannot suspend your own account.")
+        if user.role in ADMIN_ROLES and not request.user.is_super_admin:
+            raise PermissionDenied(
+                "Only a super administrator may suspend an administrator account."
+            )
+
+
+class UserReinstateView(APIView):
+    permission_classes = (IsAdmin,)
+
+    def post(self, request, pk):
+        user = generics.get_object_or_404(User, pk=pk)
+        set_user_active(actor=request.user, user=user, is_active=True)
+        return Response(UserAdminSerializer(user).data)
+
+
+class UserRoleView(APIView):
+    """Change an account's application role (§13 promoted_user)."""
+
+    permission_classes = (IsAdmin,)
+
+    def post(self, request, pk):
+        from rest_framework.exceptions import PermissionDenied
+
+        user = generics.get_object_or_404(User, pk=pk)
+        serializer = RoleChangeSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+
+        if user.role in ADMIN_ROLES and not request.user.is_super_admin:
+            raise PermissionDenied(
+                "Only a super administrator may change an administrator's role."
+            )
+        if user.id == request.user.id:
+            raise PermissionDenied("You cannot change your own role.")
+
+        change_user_role(actor=request.user, user=user, role=serializer.validated_data["role"])
+        return Response(UserAdminSerializer(user).data)

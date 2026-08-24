@@ -1,33 +1,35 @@
 import { renderFooter } from "../components/footer.js";
-import { renderEventGrid, renderCardSkeletons } from "../components/event-card.js";
+import { renderEventGrid, renderCardSkeletons, toEventList } from "../components/event-card.js";
 import { renderHeader } from "../components/header.js";
 import { api } from "../utils/api.js";
 import { escapeHtml, qs } from "../utils/dom.js";
 import { toast } from "../utils/toast.js";
 
-const EDUCATION_LEVELS = [
+// Mirrors the `is_virtual` filter on the API (backend/apps/events/filters.py).
+const FORMAT_OPTIONS = [
   { value: "", label: "All" },
-  { value: "high_school", label: "High School" },
-  { value: "college", label: "College" },
+  { value: "false", label: "In person" },
+  { value: "true", label: "Virtual" },
 ];
 
-const FEE_OPTIONS = [
-  { value: "", label: "All" },
-  { value: "free", label: "Free" },
-  { value: "paid", label: "Paid" },
+const WHEN_OPTIONS = [
+  { value: "true", label: "Upcoming" },
+  { value: "", label: "All dates" },
 ];
 
 const urlParams = new URLSearchParams(window.location.search);
 const state = {
   category: urlParams.get("category") || "",
-  location: urlParams.get("location") || "",
-  education_level: urlParams.get("education_level") || "",
-  fee: urlParams.get("fee") || "",
+  school_level: urlParams.get("school_level") || "",
+  is_virtual: urlParams.get("is_virtual") || "",
+  upcoming: urlParams.get("upcoming") ?? "true",
+  institution_slug: urlParams.get("institution_slug") || "",
   search: urlParams.get("search") || "",
   page: Number(urlParams.get("page")) || 1,
 };
 
 let categoryOptions = [{ value: "", label: "All" }];
+let schoolLevelOptions = [{ value: "", label: "All" }];
 
 function syncUrl() {
   const query = new URLSearchParams();
@@ -50,58 +52,39 @@ function renderChipGroup(container, options, currentValue, onSelect) {
   });
 }
 
-function refreshCategoryChips() {
-  renderChipGroup(qs("#filter-category"), categoryOptions, state.category, selectCategory);
-}
-
-function refreshEducationChips() {
-  renderChipGroup(qs("#filter-education"), EDUCATION_LEVELS, state.education_level, selectEducationLevel);
-}
-
-function refreshFeeChips() {
-  renderChipGroup(qs("#filter-fee"), FEE_OPTIONS, state.fee, selectFee);
-}
-
-function selectCategory(value) {
-  state.category = value;
+/** Every filter change resets to page 1 and reloads. */
+function applyFilter(key, value) {
+  state[key] = value;
   state.page = 1;
   syncUrl();
-  refreshCategoryChips();
+  refreshAllChips();
   loadEvents();
 }
 
-function selectEducationLevel(value) {
-  state.education_level = value;
-  state.page = 1;
-  syncUrl();
-  refreshEducationChips();
-  loadEvents();
+function refreshAllChips() {
+  renderChipGroup(qs("#filter-category"), categoryOptions, state.category, (v) => applyFilter("category", v));
+  renderChipGroup(qs("#filter-school-level"), schoolLevelOptions, state.school_level, (v) => applyFilter("school_level", v));
+  renderChipGroup(qs("#filter-format"), FORMAT_OPTIONS, state.is_virtual, (v) => applyFilter("is_virtual", v));
+  renderChipGroup(qs("#filter-when"), WHEN_OPTIONS, state.upcoming, (v) => applyFilter("upcoming", v));
 }
 
-function selectFee(value) {
-  state.fee = value;
-  state.page = 1;
-  syncUrl();
-  refreshFeeChips();
-  loadEvents();
-}
-
-async function loadCategoryFilter() {
-  try {
-    const categories = await api.get("/events/categories/");
-    categoryOptions = [{ value: "", label: "All" }, ...categories.map((c) => ({ value: c.slug, label: c.name }))];
-  } catch {
-    categoryOptions = [{ value: "", label: "All" }];
-  }
-  refreshCategoryChips();
+async function loadFilterOptions() {
+  const [categories, schoolLevels] = await Promise.all([
+    api.get("/categories/").catch(() => []),
+    api.get("/school-levels/").catch(() => []),
+  ]);
+  categoryOptions = [{ value: "", label: "All" }, ...categories.map((c) => ({ value: c.slug, label: c.name }))];
+  schoolLevelOptions = [{ value: "", label: "All" }, ...schoolLevels.map((l) => ({ value: l.slug, label: l.name }))];
+  refreshAllChips();
 }
 
 function buildQueryString() {
   const query = new URLSearchParams();
   if (state.category) query.set("category", state.category);
-  if (state.location) query.set("location", state.location);
-  if (state.education_level) query.set("education_level", state.education_level);
-  if (state.fee) query.set("fee", state.fee);
+  if (state.school_level) query.set("school_level", state.school_level);
+  if (state.is_virtual) query.set("is_virtual", state.is_virtual);
+  if (state.upcoming) query.set("upcoming", state.upcoming);
+  if (state.institution_slug) query.set("institution_slug", state.institution_slug);
   if (state.search) query.set("search", state.search);
   query.set("page", state.page);
   return query.toString();
@@ -113,7 +96,7 @@ async function loadEvents() {
 
   try {
     const data = await api.get(`/events/?${buildQueryString()}`);
-    renderEventGrid(grid, data.results, "No events match those filters yet.");
+    renderEventGrid(grid, toEventList(data), "No events match those filters yet.");
     qs("#results-count").textContent = `${data.count} event${data.count === 1 ? "" : "s"} found`;
     renderPagination(data);
   } catch (err) {
@@ -152,34 +135,17 @@ function renderPagination(data) {
   }
 }
 
-function setupStaticFilters() {
-  refreshEducationChips();
-  refreshFeeChips();
-
-  const locationInput = qs("#filter-location");
-  locationInput.value = state.location;
-  let debounceTimer;
-  locationInput.addEventListener("input", () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      state.location = locationInput.value.trim();
-      state.page = 1;
-      syncUrl();
-      loadEvents();
-    }, 400);
-  });
-
+function wireClearButton() {
   qs("#filter-clear").addEventListener("click", () => {
     state.category = "";
-    state.location = "";
-    state.education_level = "";
-    state.fee = "";
+    state.school_level = "";
+    state.is_virtual = "";
+    state.upcoming = "true";
+    state.institution_slug = "";
+    state.search = "";
     state.page = 1;
-    locationInput.value = "";
     syncUrl();
-    refreshCategoryChips();
-    refreshEducationChips();
-    refreshFeeChips();
+    refreshAllChips();
     loadEvents();
   });
 }
@@ -192,8 +158,8 @@ async function init() {
     qs("#listings-heading").textContent = `Results for "${state.search}"`;
   }
 
-  await loadCategoryFilter();
-  setupStaticFilters();
+  wireClearButton();
+  await loadFilterOptions();
   await loadEvents();
 }
 

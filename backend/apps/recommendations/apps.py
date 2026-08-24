@@ -5,4 +5,4 @@ class RecommendationsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.recommendations"
     label = "recommendations"
-    verbose_name = "Recommendations & Curation"
+    verbose_name = "Recommendations"

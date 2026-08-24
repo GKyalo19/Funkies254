@@ -1,82 +1,138 @@
-"""Shared pytest fixtures available to every test in the backend."""
+"""Shared pytest fixtures."""
+
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
+
+from apps.common.enums import SchoolLevelSlug, UserRole
+from apps.events.models import Category, Event, EventCategory, SchoolLevel
+from apps.organizers.models import Institution
+from apps.preferences.models import UserPreference
+from apps.users.models import User
+
+PASSWORD = "TestPass!2026"
 
 
 @pytest.fixture
-def api_client():
-    """
-    A DRF APIClient. Because our auth tokens live in cookies (not headers),
-    this plain client is enough — Django's test client keeps a cookie jar
-    across requests automatically, exactly like a real browser session.
-    """
+def api():
     return APIClient()
 
 
 @pytest.fixture
-def create_user(db):
-    from apps.users.models import User
-
-    def _create_user(email="student@example.com", password="StrongPass123", **kwargs):
-        return User.objects.create_user(email=email, password=password, **kwargs)
-
-    return _create_user
+def categories(db):
+    return {
+        slug: Category.objects.create(name=name, slug=slug)
+        for name, slug in (("Sports", "sports"), ("Math", "math"), ("Chess", "chess"))
+    }
 
 
 @pytest.fixture
-def create_staff_user(create_user):
-    def _create_staff_user(email="admin@example.com", password="StrongPass123", **kwargs):
-        kwargs["is_staff"] = True
-        return create_user(email=email, password=password, **kwargs)
-
-    return _create_staff_user
-
-
-@pytest.fixture
-def logged_in_client(api_client, create_user):
-    """Returns (client, user) already authenticated via the real /api/auth/login/ endpoint."""
-
-    def _logged_in_client(**user_kwargs):
-        password = user_kwargs.pop("password", "StrongPass123")
-        user = create_user(password=password, **user_kwargs)
-        response = api_client.post("/api/auth/login/", {"email": user.email, "password": password})
-        assert response.status_code == 200
-        return api_client, user
-
-    return _logged_in_client
+def school_levels(db):
+    return {
+        slug: SchoolLevel.objects.create(name=name, slug=slug)
+        for name, slug in (
+            ("Senior Secondary", SchoolLevelSlug.SENIOR_SECONDARY.value),
+            ("College", SchoolLevelSlug.COLLEGE.value),
+        )
+    }
 
 
 @pytest.fixture
-def organizer(db):
-    from apps.organizers.models import Organizer
-
-    return Organizer.objects.create(name="Brookside Kenya", years_hosting=10)
-
-
-@pytest.fixture
-def category(db):
-    from apps.events.models import Category
-
-    return Category.objects.create(name="Math")
+def institution(db):
+    return Institution.objects.create(
+        name="Nairobi High School", slug="nairobi-high-school", location="Ngara, Nairobi", verified=True
+    )
 
 
 @pytest.fixture
-def make_event(db, organizer):
-    from django.utils import timezone
+def other_institution(db):
+    return Institution.objects.create(name="Mombasa Academy", slug="mombasa-academy", verified=True)
 
-    from apps.events.models import Event
 
-    def _make_event(**kwargs):
-        defaults = {
-            "title": "64th Annual Math Olympiad",
-            "organizer": organizer,
-            "description": "A fun math competition.",
-            "venue_name": "Mang'u High School",
-            "location": "Nairobi",
-            "start_datetime": timezone.now() + timezone.timedelta(days=7),
-            "status": "published",
-        }
-        defaults.update(kwargs)
-        return Event.objects.create(**defaults)
+def _make_user(email, role, institution=None, **flags):
+    user = User.objects.create_user(
+        email=email, password=PASSWORD, name=email.split("@")[0].title(), role=role,
+        institution=institution, **flags
+    )
+    UserPreference.objects.create(user=user)
+    return user
 
-    return _make_event
+
+@pytest.fixture
+def student(db, institution):
+    return _make_user("student@example.com", UserRole.STUDENT, institution)
+
+
+@pytest.fixture
+def other_student(db):
+    return _make_user("student2@example.com", UserRole.STUDENT)
+
+
+@pytest.fixture
+def staff(db, institution):
+    return _make_user("staff@example.com", UserRole.INSTITUTION_STAFF, institution)
+
+
+@pytest.fixture
+def other_staff(db, other_institution):
+    return _make_user("staff2@example.com", UserRole.INSTITUTION_STAFF, other_institution)
+
+
+@pytest.fixture
+def admin_user(db):
+    return _make_user("admin@example.com", UserRole.ADMIN, is_staff=True)
+
+
+@pytest.fixture
+def super_admin(db):
+    return _make_user("super@example.com", UserRole.SUPER_ADMIN, is_staff=True, is_superuser=True)
+
+
+@pytest.fixture
+def login(api):
+    """Authenticate a user through the real login endpoint so cookies are set."""
+
+    def _login(user, password=PASSWORD):
+        response = api.post(
+            "/api/auth/login/", {"email": user.email, "password": password}, format="json"
+        )
+        assert response.status_code == 200, response.data
+        return response
+
+    return _login
+
+
+@pytest.fixture
+def event(db, institution, staff, school_levels, categories):
+    instance = Event.objects.create(
+        title="Nairobi Math Olympiad",
+        description="County mathematics competition.",
+        institution=institution,
+        start_time=timezone.now() + timedelta(days=7),
+        end_time=timezone.now() + timedelta(days=7, hours=6),
+        venue="Main Hall",
+        location="Ngara, Nairobi",
+        school_level=school_levels[SchoolLevelSlug.SENIOR_SECONDARY.value],
+        is_verified=True,
+        created_by=staff,
+    )
+    EventCategory.objects.create(event=instance, category=categories["math"])
+    return instance
+
+
+@pytest.fixture
+def event_payload(institution, school_levels, categories):
+    start = timezone.now() + timedelta(days=30)
+    return {
+        "title": "County Chess Championship",
+        "description": "Knockout chess tournament for secondary students.",
+        "institution_id": str(institution.id),
+        "start_time": start.isoformat(),
+        "end_time": (start + timedelta(hours=8)).isoformat(),
+        "venue": "School Library",
+        "location": "Ngara, Nairobi",
+        "school_level_id": str(school_levels[SchoolLevelSlug.SENIOR_SECONDARY.value].id),
+        "category_ids": [str(categories["chess"].id)],
+    }

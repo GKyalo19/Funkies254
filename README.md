@@ -33,14 +33,21 @@ python3 -m http.server 5500
 Then open `http://127.0.0.1:5500/index.html`. Full instructions (including Supabase
 setup): see [`docs/SETUP.md`](docs/SETUP.md).
 
+To exercise the API on its own, import
+[`docs/Funkies254.postman_collection.json`](docs/Funkies254.postman_collection.json) into
+Postman and run **Auth → Login (student)** first — authentication is cookie-based and
+Postman replays the cookies automatically.
+
 ## Documentation
 
 | Doc | What's in it |
 |---|---|
 | [`docs/FILE_GUIDE.md`](docs/FILE_GUIDE.md) | File-by-file map of the whole repo — what each file does and where to go to change something |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Why each technology was chosen, how the frontend/backend/database talk to each other, folder-by-folder breakdown |
-| [`docs/SETUP.md`](docs/SETUP.md) | Step-by-step local dev setup, including Supabase configuration |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Why each technology was chosen, how the frontend/backend/database talk to each other |
+| [`docs/SETUP.md`](docs/SETUP.md) | Step-by-step local dev setup, including Supabase configuration and Postman testing |
 | [`docs/API.md`](docs/API.md) | Every REST endpoint, request/response shapes, and `curl` examples |
+| [`docs/DATABASE.md`](docs/DATABASE.md) | ERD, table-by-table schema, constraints, indexes, migration workflow |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | Cookies, CORS/CSRF, roles and ownership, secrets, storage access |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Deploying for free to Render (backend) + Netlify (frontend) |
 
 ## Tech stack
@@ -53,8 +60,12 @@ setup): see [`docs/SETUP.md`](docs/SETUP.md).
 
 ## Status
 
-Core flows are implemented and tested end-to-end: registration/login/logout/password
-reset, browsing + filtering events, event detail with follow/register, preferences that
-drive a curated home feed, profile management with avatar uploads, and a staff-only event
-creation tool. See the todo list in `docs/ARCHITECTURE.md` §8 for the planned growth path
-(mobile app, real ML-based recommendations, organizer self-service).
+The backend implements the full specification with 148 passing tests: cookie-JWT
+authentication, four roles with object-level ownership checks, institutions with admin
+verification, curated events with categories and school levels, saved events,
+transactional registrations, per-user preferences, a rule-based recommendation feed,
+audit logging of every privileged action, and Supabase Storage for media.
+
+Deliberately not built, because the schema for them is not confirmed: event capacity,
+featured events, organizer follows, notification history, and password reset. See
+`docs/API.md` for what exists today.

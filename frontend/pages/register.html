@@ -17,15 +17,14 @@
 
       <form id="register-form" novalidate>
         <div class="field">
-          <label for="institution" class="visually-hidden">Organization / Institution</label>
-          <input type="text" id="institution" name="institution" placeholder="Organization / Institution" required />
+          <label for="name" class="visually-hidden">Full name</label>
+          <input type="text" id="name" name="name" placeholder="Full name" required autocomplete="name" maxlength="150" />
           <span class="error-text"></span>
         </div>
         <div class="field">
-          <label for="education_level" class="visually-hidden">Education Level</label>
-          <select id="education_level" name="education_level" required>
-            <option value="high_school">High School</option>
-            <option value="college">College</option>
+          <label for="institution_id" class="visually-hidden">Organization / Institution</label>
+          <select id="institution_id" name="institution_id">
+            <option value="">Organization / Institution (optional)</option>
           </select>
           <span class="error-text"></span>
         </div>
@@ -41,8 +40,8 @@
         </div>
         <p class="form-hint">*Must contain alphanumeric and special characters such as */#&amp;...</p>
         <div class="field">
-          <label for="confirm_password" class="visually-hidden">Confirm password</label>
-          <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm password" required minlength="8" autocomplete="new-password" />
+          <label for="password_confirm" class="visually-hidden">Confirm password</label>
+          <input type="password" id="password_confirm" name="password_confirm" placeholder="Confirm password" required minlength="8" autocomplete="new-password" />
           <span class="error-text"></span>
         </div>
         <p class="form-hint">*Passwords must match</p>

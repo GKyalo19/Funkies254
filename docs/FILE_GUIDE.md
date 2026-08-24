@@ -34,105 +34,115 @@ Funkies254 Dev/
 ```
 backend/
 ├── manage.py                  Django's CLI entrypoint — run everything through this
-│                               (migrate, runserver, createsuperuser, seed_demo_data, test)
+│                               (migrate, runserver, createsuperuser, seed_demo_data)
 ├── requirements.txt            Production Python dependencies (installed on Render)
 ├── requirements-dev.txt        + pytest, pytest-django, faker — local/dev only
 ├── pytest.ini                  pytest config (points at config.settings, reuses DB)
-├── conftest.py                 Shared pytest fixtures (e.g. an authenticated API client)
+├── conftest.py                 Shared pytest fixtures (roles, institution, event, login)
 ├── .env.example                 Template for your own backend/.env (copy, don't edit this one)
 ├── .env                          Your real local secrets — gitignored, never commit
-├── db.sqlite3                    Local dev database file (auto-created, gitignored)
-├── Procfile                       Tells Render/Heroku-style hosts how to run gunicorn
+├── db.sqlite3                    Local SQLite fallback used when DATABASE_URL is blank
+├── Procfile                       Tells Render how to run gunicorn + release migrations
 ├── render.yaml                    Render "infra as code" — declares the web service + env vars
 │
 ├── config/                        The Django "project" — global settings, not a feature
-│   ├── settings.py                 THE file for config: installed apps, DB connection,
-│   │                                CORS_ALLOWED_ORIGINS, JWT lifetimes/cookie names,
-│   │                                Supabase env vars, static/media paths
-│   ├── urls.py                      Root URL router — maps /api/<app>/ prefixes to each
-│   │                                app's own urls.py (see the table below)
+│   ├── settings.py                 THE config file: installed apps, Supabase DB connection,
+│   │                                DRF defaults, JWT lifetimes and cookie flags, CORS/CSRF,
+│   │                                Supabase Storage credentials, upload limits
+│   ├── urls.py                      Root URL router — /admin/, /api/health/, /api/auth/ and
+│   │                                the per-app includes mounted under /api/
 │   ├── wsgi.py                      Entrypoint gunicorn uses in production (via Procfile)
 │   └── asgi.py                      Async entrypoint (present for completeness; unused for now)
 │
-└── apps/                          One Django "app" (folder) per feature area
-    ├── common/                     Shared code with no database models of its own
-    │   ├── exceptions.py            Normalises every API error into one JSON shape:
-    │   │                            { "error": { "message": "...", "fields": {...}|null } }
-    │   ├── permissions.py            IsStaffOrReadOnly (events/organizers are curated, not
-    │   │                              user-generated) and IsOwner (object-level ownership check)
-    │   └── supabase_storage.py        upload_file()/delete_file() against Supabase Storage's
-    │                                    REST API — used for avatars + event cover images
+└── apps/                          One Django app per area of the domain
+    ├── common/                     Shared foundation used by every other app
+    │   ├── enums.py                 THE controlled vocabularies: UserRole, RegistrationStatus,
+    │   │                             AuditAction, SchoolLevelSlug — defined once, imported
+    │   │                             everywhere, so filters/analytics never drift
+    │   ├── models.py                 UUIDPrimaryKeyModel + TimeStampedModel abstract bases,
+    │   │                             and AdminActivityLog (the audit table)
+    │   ├── audit.py                  log_action() — the single way an audit row gets written
+    │   ├── permissions.py            IsStudent / IsInstitutionStaff / IsAdmin / IsSuperAdmin /
+    │   │                             IsStaffOrReadOnly / IsEventOwner / IsInstitutionOwner
+    │   ├── exceptions.py             Domain exceptions + the one JSON error envelope:
+    │   │                             { "detail": "...", "code": "...", "errors": {...} }
+    │   ├── pagination.py             DefaultPagination (page/page_size, max 100)
+    │   ├── db.py                     for_update() — row locking on PostgreSQL, no-op on SQLite
+    │   ├── supabase_storage.py       Upload/replace/delete against Supabase Storage's REST API,
+    │   │                             plus file type/size validation and server-side object paths
+    │   ├── serializers.py, views.py, urls.py   Read-only audit log endpoint for the admin dashboard
+    │   ├── admin.py                  AdminActivityLog admin (read-only)
+    │   └── management/commands/seed_demo_data.py   Idempotent reference + demo data
     │
-    ├── users/                       Accounts, auth, profile
-    │   ├── models.py                  Custom User (email as username) + EducationLevel choices
-    │   ├── managers.py                 UserManager — create_user()/create_superuser() by email
-    │   ├── authentication.py           CookieJWTAuthentication (reads JWT from httpOnly cookie
-    │   │                                instead of an Authorization header) + set/clear cookie helpers
-    │   ├── tokens.py                    Password-reset token generator (invalidated if email changes)
-    │   ├── serializers.py                RegisterSerializer, LoginSerializer, MeSerializer, etc.
-    │   ├── views.py                       RegisterView, LoginView, LogoutView, RefreshView,
-    │   │                                    PasswordResetRequestView, PasswordResetConfirmView,
-    │   │                                    MeView (GET/PATCH own profile), AvatarUploadView
-    │   ├── auth_urls.py                    Routes under /api/auth/ (register, login, logout,
-    │   │                                    token/refresh, password-reset, password-reset/confirm)
-    │   ├── urls.py                          Routes under /api/users/ (me/, me/avatar/)
-    │   ├── admin.py                          Registers User in Django admin
-    │   └── migrations/                        Database schema history for this app
+    ├── users/                       Accounts and authentication
+    │   ├── models.py                  Custom User (UUID pk, email login, role, institution FK)
+    │   ├── managers.py                 UserManager — create_user/create_superuser, email normalising
+    │   ├── authentication.py           CookieJWTAuthentication — reads the access token from the
+    │   │                                httpOnly cookie and enforces CSRF on cookie-authed writes
+    │   ├── tokens.py                    Token issuing + cookie set/clear/blacklist helpers
+    │   ├── services.py                   register_user, set_user_active, change_user_role
+    │   ├── serializers.py                 Register/Login/User/UserAdmin/RoleChange serializers
+    │   ├── views.py                        Register, Login, TokenRefresh, Logout, Csrf, Me,
+    │   │                                    UserList, Suspend, Reinstate, Role
+    │   ├── auth_urls.py                    Routes under /api/auth/
+    │   ├── urls.py                          Routes under /api/users/
+    │   ├── admin.py                          UserAdmin (email, name, role, institution, active)
+    │   └── migrations/                        Schema history for this app
     │
-    ├── organizers/                    Event hosts (schools, clubs) + follow relationships
-    │   ├── models.py                    Organizer (name, slug, description, logo) + Follow (user↔organizer)
-    │   ├── serializers.py                 OrganizerSerializer (+ follower counts)
-    │   ├── views.py                        OrganizerViewSet (CRUD, staff-only writes) with a
-    │   │                                    custom follow/unfollow action
-    │   ├── urls.py                          Routes under /api/organizers/
-    │   ├── admin.py                          Registers Organizer/Follow in Django admin
+    ├── organizers/                    Institutions — the hosts of events
+    │   ├── models.py                    Institution (name, unique slug, contact, logo, verified)
+    │   ├── services.py                   create/update/verify + the audit records they write
+    │   ├── serializers.py                 InstitutionSerializer + a brief nested form
+    │   ├── views.py                        Public list/detail, admin create, owner PATCH, verify
+    │   ├── urls.py                          Routes under /api/institutions/
+    │   ├── admin.py                          InstitutionAdmin with verify/unverify actions
     │   └── migrations/
     │
-    ├── events/                        The core content: categories + events
-    │   ├── models.py                    Category (flat taxonomy: Math, Music, Volleyball...),
-    │   │                                  EventStatus choices, Event (title, organizer FK,
-    │   │                                  categories M2M, venue, date, fee, capacity, is_featured)
-    │   ├── filters.py                     django-filter FilterSet — powers ?category=&location=
-    │   │                                  &education_level=&fee=&is_free query params
-    │   ├── serializers.py                  EventListSerializer (light, for grids) vs.
-    │   │                                    EventDetailSerializer (full, for the event page)
-    │   ├── views.py                          CategoryViewSet, EventViewSet (list/retrieve by
-    │   │                                     slug, staff-only create/update/delete)
-    │   ├── urls.py                            Routes under /api/events/ (+ /api/events/categories/)
-    │   ├── admin.py                            Rich admin list (filter/search/bulk "mark featured")
-    │   ├── management/commands/seed_demo_data.py   Populates realistic demo organizers/
-    │   │                                             categories/events for local testing —
-    │   │                                             run with `python manage.py seed_demo_data`
+    ├── events/                        The curated content and its taxonomies
+    │   ├── models.py                    SchoolLevel, Category, Event (+ EventQuerySet.visible_to),
+    │   │                                  EventCategory through table, SavedEvent
+    │   ├── filters.py                     ?category=&school_level=&institution=&is_virtual=
+    │   │                                  &start_after=&start_before=&upcoming=&search=
+    │   ├── serializers.py                  EventSerializer (read) vs EventWriteSerializer
+    │   │                                    (dates, virtual/physical contradictions, ownership)
+    │   ├── services.py                      create/update/delete/verify event, save/unsave —
+    │   │                                     transactional, audited, storage-aware
+    │   ├── views.py                          Event list/detail/verify/save, saved-event list,
+    │   │                                     per-event registration list, category + level lists
+    │   ├── urls.py                            Routes under /api/events/, /api/categories/,
+    │   │                                       /api/school-levels/, /api/users/me/saved-events/
+    │   ├── admin.py                            EventAdmin (+ verify action), Category, SchoolLevel,
+    │   │                                       SavedEvent admins
     │   └── migrations/
     │
-    ├── registrations/                  A student's RSVP to an event
-    │   ├── models.py                     RegistrationStatus choices + Registration (user FK,
-    │   │                                  event FK, unique-together, capacity enforcement)
-    │   ├── serializers.py                  RegistrationSerializer
-    │   ├── views.py                          RegistrationViewSet (create/list own, staff can see all;
-    │   │                                     blocks duplicate/over-capacity registrations)
-    │   ├── urls.py                            Routes under /api/registrations/
-    │   ├── admin.py                            Registers Registration in Django admin
+    ├── registrations/                  A student's registration for an event
+    │   ├── models.py                     EventRegistration (unique per user+event, status)
+    │   ├── services.py                    register_for_event (locks the event row, re-checks it,
+    │   │                                   reactivates cancelled rows), cancel, set status
+    │   ├── serializers.py                  Read + create + status-change serializers
+    │   ├── views.py                          Create, own list, detail, cancel, mark attendance
+    │   ├── urls.py                            Routes under /api/registrations/ and
+    │   │                                       /api/users/me/registrations/
+    │   ├── admin.py                            RegistrationAdmin (event, user, status, time)
     │   └── migrations/
     │
-    ├── preferences/                     A student's interests (drives the home feed)
-    │   ├── models.py                      UserPreference (categories M2M, education_levels,
-    │   │                                   locations, feed_window_days) — 1:1 with User
-    │   ├── serializers.py                   UserPreferenceSerializer
-    │   ├── views.py                           MyPreferenceView (GET/PUT own preferences only)
-    │   ├── urls.py                             Routes under /api/preferences/ (me/)
-    │   ├── admin.py                             Registers UserPreference in Django admin
+    ├── preferences/                     One preference row per user
+    │   ├── models.py                      UserPreference (1:1 User, school level, notification
+    │   │                                   toggles) + UserPreferenceCategory through table
+    │   ├── serializers.py                   Reads nested taxonomies, writes id lists
+    │   ├── views.py                           MyPreferenceView — GET/PATCH own row only
+    │   ├── urls.py                             Route under /api/preferences/me/
+    │   ├── admin.py                             UserPreferenceAdmin with category inline
     │   └── migrations/
     │
-    └── recommendations/                   Rule-based curation for the home feed
-        ├── services.py                       rank_events_for_user() — the one function that
-        │                                      scores/sorts events (category overlap, location
-        │                                      match, education-level match, followed-organizer
-        │                                      boost, featured boost, "happening soon" boost);
-        │                                      swap this out later for real ML without touching
-        │                                      views/serializers/frontend
-        ├── views.py                            FeedView — GET /api/recommendations/feed/
-        └── urls.py                              Routes under /api/recommendations/
+    └── recommendations/                   Rule-based ranking for the home feed
+        ├── services.py                       build_profile + score_event + recommend_events:
+        │                                      category overlap, school-level match, location
+        │                                      match, institution match, happening-soon decay.
+        │                                      Every point is explained by a named rule and the
+        │                                      ordering is deterministic.
+        ├── views.py                            RecommendationFeedView — works signed in or out
+        └── urls.py                              Route under /api/recommendations/feed/
 ```
 
 Every `apps/<name>/tests/` folder holds that app's `pytest` tests (happy path,
@@ -140,15 +150,18 @@ permission boundaries, edge cases). Run them all with `pytest` from `backend/`.
 
 ### 2.1 URL prefix → app cheat-sheet
 
-| URL prefix | Handled by | 
+| URL prefix | Handled by |
 |---|---|
-| `/api/auth/*` | `apps/users/auth_urls.py` (register, login, logout, refresh, password reset) |
-| `/api/users/*` | `apps/users/urls.py` (`me/`, `me/avatar/`) |
-| `/api/organizers/*` | `apps/organizers/urls.py` |
-| `/api/events/*` | `apps/events/urls.py` (+ nested `categories/`) |
+| `/api/auth/*` | `apps/users/auth_urls.py` (register, login, token/refresh, logout, csrf) |
+| `/api/users/me/`, `/api/users/` | `apps/users/urls.py` (profile, admin account management) |
+| `/api/users/me/saved-events/` | `apps/events/urls.py` |
+| `/api/users/me/registrations/` | `apps/registrations/urls.py` |
+| `/api/institutions/*` | `apps/organizers/urls.py` |
+| `/api/events/*`, `/api/categories/`, `/api/school-levels/` | `apps/events/urls.py` |
 | `/api/registrations/*` | `apps/registrations/urls.py` |
-| `/api/preferences/*` | `apps/preferences/urls.py` (`me/`) |
-| `/api/recommendations/*` | `apps/recommendations/urls.py` (`feed/`) |
+| `/api/preferences/me/` | `apps/preferences/urls.py` |
+| `/api/recommendations/feed/` | `apps/recommendations/urls.py` |
+| `/api/admin/activity-logs/` | `apps/common/urls.py` |
 | `/admin/*` | Django's built-in admin site |
 
 Full request/response shapes and `curl` examples for every one of these live

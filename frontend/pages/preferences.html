@@ -25,8 +25,8 @@
 
       <form id="preferences-form" novalidate>
         <div class="preference-group">
-          <h4>Education level</h4>
-          <div class="tag-select" id="education-tags"></div>
+          <h4>School level</h4>
+          <div class="tag-select" id="school-level-tags"></div>
         </div>
 
         <div class="preference-group">
@@ -35,16 +35,15 @@
         </div>
 
         <div class="preference-group">
-          <h4>Preferred locations</h4>
-          <div class="tag-select" id="location-tags"></div>
-          <div class="field" style="margin-top:12px;max-width:320px;">
-            <input type="text" id="new-location-input" placeholder="Add a city, e.g. Nairobi" style="padding:10px 16px;font-size:14px;" />
-          </div>
-        </div>
-
-        <div class="preference-group">
-          <h4>Happening in the next...</h4>
-          <div class="tag-select" id="days-ahead-tags"></div>
+          <h4>Notifications</h4>
+          <label style="display:block;margin-bottom:8px;">
+            <input type="checkbox" id="email_notifications" style="width:auto;display:inline;margin-right:8px;" />
+            Email me about events that match my preferences
+          </label>
+          <label style="display:block;">
+            <input type="checkbox" id="push_notifications" style="width:auto;display:inline;margin-right:8px;" />
+            Send me push notifications
+          </label>
         </div>
 
         <div class="form-actions">

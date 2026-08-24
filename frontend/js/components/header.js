@@ -7,11 +7,12 @@
  * hamburger trigger on the right that opens a dropdown with either the
  * auth links (logged out) or the account menu (logged in).
  */
-import { getCurrentUser, initials, logout } from "../utils/auth.js";
-import { qs } from "../utils/dom.js";
+import { canManageEvents, displayName, getCurrentUser, initials, logout } from "../utils/auth.js";
+import { escapeHtml, qs } from "../utils/dom.js";
 
 function loggedOutMenu() {
   return `
+    <a href="/index.html">Home</a>
     <a href="/pages/login.html">Log in</a>
     <a href="/pages/register.html">Register</a>
   `;
@@ -19,10 +20,11 @@ function loggedOutMenu() {
 
 function loggedInMenu(user) {
   return `
+    <a href="/index.html">Home</a>
     <a href="/pages/profile.html">My Profile</a>
     <a href="/pages/preferences.html">Preferences</a>
     <a href="/pages/registrations.html">My Registrations</a>
-    ${user.is_staff ? '<a href="/pages/event-form.html">+ Add Event (staff)</a>' : ""}
+    ${canManageEvents(user) ? '<a href="/pages/event-form.html">+ Add Event</a>' : ""}
     <button type="button" id="header-logout-btn">Log out</button>
   `;
 }
@@ -39,7 +41,7 @@ export async function renderHeader(activeSearchValue = "") {
         </a>
         <form class="search-bar" id="header-search-form">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <input type="search" name="q" placeholder="Search events" value="${activeSearchValue}" />
+          <input type="search" name="q" placeholder="Search events" value="${escapeHtml(activeSearchValue)}" />
         </form>
         <div class="header-actions" id="header-actions">
           <div class="menu-dropdown">
@@ -67,9 +69,9 @@ export async function renderHeader(activeSearchValue = "") {
     panel.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;">
         <span class="avatar" style="width:36px;height:36px;font-size:14px;">
-          ${user.avatar_url ? `<img src="${user.avatar_url}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : initials(user)}
+          ${user.avatar_url ? `<img src="${escapeHtml(user.avatar_url)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : initials(user)}
         </span>
-        <span style="font-weight:700;">${user.institution || user.email}</span>
+        <span style="font-weight:700;">${escapeHtml(displayName(user))}</span>
       </div>
       ${loggedInMenu(user)}
     `;

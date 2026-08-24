@@ -12,12 +12,22 @@
 import { API_BASE_URL } from "./config.js";
 
 export class ApiError extends Error {
-  constructor(message, status, fields) {
+  constructor(message, status, fields, code) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.fields = fields || null;
+    this.code = code || null;
   }
+}
+
+const UNSAFE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
+
+function readCookie(name) {
+  return document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
 }
 
 async function parseBody(response) {
@@ -50,6 +60,13 @@ async function request(path, { method = "GET", body, isFormData = false, allowRe
     }
   }
 
+  // Production runs with JWT_COOKIE_CSRF_ENFORCED=True, so cookie-authenticated
+  // writes must echo the csrftoken cookie back as a header.
+  if (UNSAFE_METHODS.has(method)) {
+    const csrfToken = readCookie("csrftoken");
+    if (csrfToken) options.headers["X-CSRFToken"] = csrfToken;
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, options);
 
   if (response.status === 401 && allowRetry && !path.startsWith("/auth/")) {
@@ -62,8 +79,10 @@ async function request(path, { method = "GET", body, isFormData = false, allowRe
   const data = await parseBody(response);
 
   if (!response.ok) {
-    const message = data?.error?.message || data?.detail || "Something went wrong. Please try again.";
-    throw new ApiError(message, response.status, data?.error?.fields || null);
+    // The API's error envelope is {detail, code, errors?} — see
+    // backend/apps/common/exceptions.py.
+    const message = data?.detail || "Something went wrong. Please try again.";
+    throw new ApiError(message, response.status, data?.errors || null, data?.code || null);
   }
 
   return data;
@@ -76,5 +95,6 @@ export const api = {
   put: (path, body, opts = {}) => request(path, { method: "PUT", body, ...opts }),
   delete: (path) => request(path, { method: "DELETE" }),
   /** For multipart/form-data uploads (avatar, event cover images). */
-  upload: (path, formData) => request(path, { method: "POST", body: formData, isFormData: true }),
+  upload: (path, formData, method = "POST") =>
+    request(path, { method, body: formData, isFormData: true }),
 };

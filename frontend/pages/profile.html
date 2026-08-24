@@ -30,35 +30,22 @@
 
       <form id="profile-form" novalidate>
         <div class="profile-field-row">
-          <span class="field-label">First name:</span>
-          <input type="text" id="first_name" name="first_name" />
-        </div>
-        <div class="profile-field-row">
-          <span class="field-label">Last name:</span>
-          <input type="text" id="last_name" name="last_name" />
+          <span class="field-label">Full name:</span>
+          <input type="text" id="name" name="name" maxlength="150" />
         </div>
         <div class="profile-field-row">
           <span class="field-label">Email:</span>
           <input type="email" id="email" name="email" disabled />
         </div>
         <div class="profile-field-row">
+          <span class="field-label">Role:</span>
+          <input type="text" id="role" disabled />
+        </div>
+        <div class="profile-field-row">
           <span class="field-label">Institution:</span>
-          <input type="text" id="institution" name="institution" />
+          <input type="text" id="institution" disabled />
         </div>
-        <div class="profile-field-row">
-          <span class="field-label">Education level:</span>
-          <select id="education_level" name="education_level" style="flex:1;padding:10px 16px;border-radius:var(--radius-md);border:none;background:var(--color-input-bg);color:var(--color-input-text);font-family:var(--font-display);font-size:16px;">
-            <option value="high_school">High School</option>
-            <option value="college">College</option>
-            <option value="both">Both</option>
-          </select>
-        </div>
-        <div class="profile-field-row">
-          <span class="field-label">Phone number:</span>
-          <input type="text" id="phone_number" name="phone_number" placeholder="1 (405) 546 7788" />
-        </div>
-
-        <a href="/pages/reset-password.html" class="manage-prefs-link" style="font-size:16px;">Change password?</a>
+        <p class="form-hint">Your email, role and institution are managed by an administrator.</p>
 
         <div class="form-actions">
           <button type="submit" class="btn btn-gold" id="save-btn">Save Changes</button>

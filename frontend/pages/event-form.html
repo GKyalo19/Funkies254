@@ -13,6 +13,8 @@
   <div id="site-header"></div>
 
   <main class="container page-section" style="max-width:720px;">
+    <!-- Hidden until we know the visitor is staff/admin, so students don't see a flash of the form. -->
+    <div id="event-form-page" hidden>
     <h1>Add Event</h1>
     <p>Staff-only tool for curating new events. (You can also use the Django admin for bulk edits.)</p>
 
@@ -21,72 +23,73 @@
         <div class="field">
           <label for="title">Title</label>
           <input type="text" id="title" name="title" required />
+          <span class="error-text"></span>
         </div>
         <div class="field">
-          <label for="organizer">Organizer</label>
-          <select id="organizer" name="organizer" required></select>
+          <label for="institution_id">Institution</label>
+          <select id="institution_id" name="institution_id" required></select>
+          <span class="error-text"></span>
         </div>
         <div class="field">
           <label>Categories</label>
           <div class="tag-select" id="categories-field"></div>
+          <span class="error-text"></span>
         </div>
         <div class="field">
-          <label for="short_description">Short description (for cards)</label>
-          <input type="text" id="short_description" name="short_description" maxlength="255" />
-        </div>
-        <div class="field">
-          <label for="description">Full description</label>
+          <label for="description">Description</label>
           <textarea id="description" name="description" rows="4" required></textarea>
+          <span class="error-text"></span>
         </div>
         <div class="field">
-          <label for="venue_name">Venue name</label>
-          <input type="text" id="venue_name" name="venue_name" required />
-        </div>
-        <div class="field">
-          <label for="address">Address</label>
-          <input type="text" id="address" name="address" />
-        </div>
-        <div class="field">
-          <label for="location">Location (city/region)</label>
-          <input type="text" id="location" name="location" required />
-        </div>
-        <div class="field">
-          <label for="education_level">Education level</label>
-          <select id="education_level" name="education_level">
-            <option value="high_school">High School</option>
-            <option value="college">College</option>
-            <option value="both" selected>Both</option>
+          <label for="school_level_id">School level</label>
+          <select id="school_level_id" name="school_level_id">
+            <option value="">Any level</option>
           </select>
+          <span class="error-text"></span>
         </div>
         <div class="field">
-          <label for="start_datetime">Start date &amp; time</label>
-          <input type="datetime-local" id="start_datetime" name="start_datetime" required />
+          <label><input type="checkbox" id="is_virtual" name="is_virtual" style="width:auto;display:inline;margin-right:8px;" />This is a virtual event</label>
+        </div>
+        <div id="physical-fields">
+          <div class="field">
+            <label for="venue">Venue</label>
+            <input type="text" id="venue" name="venue" />
+            <span class="error-text"></span>
+          </div>
+          <div class="field">
+            <label for="location">Location (city/region)</label>
+            <input type="text" id="location" name="location" />
+            <span class="error-text"></span>
+          </div>
         </div>
         <div class="field">
-          <label for="end_datetime">End date &amp; time (optional)</label>
-          <input type="datetime-local" id="end_datetime" name="end_datetime" />
+          <label for="registration_link">Registration / joining link <span id="link-required-hint" style="display:none;">(required for virtual events)</span></label>
+          <input type="url" id="registration_link" name="registration_link" placeholder="https://..." />
+          <span class="error-text"></span>
         </div>
         <div class="field">
-          <label for="registration_fee">Registration fee (KES, 0 = free)</label>
-          <input type="number" id="registration_fee" name="registration_fee" value="0" min="0" step="0.01" />
+          <label for="start_time">Start date &amp; time</label>
+          <input type="datetime-local" id="start_time" name="start_time" required />
+          <span class="error-text"></span>
         </div>
         <div class="field">
-          <label for="capacity">Capacity (leave blank for unlimited)</label>
-          <input type="number" id="capacity" name="capacity" min="1" />
+          <label for="end_time">End date &amp; time</label>
+          <input type="datetime-local" id="end_time" name="end_time" required />
+          <span class="error-text"></span>
         </div>
         <div class="field">
-          <label><input type="checkbox" id="is_featured" name="is_featured" style="width:auto;display:inline;margin-right:8px;" />Feature this event (boosts it in the recommended feed)</label>
+          <label for="cover_image">Cover image (optional)</label>
+          <input type="file" id="cover_image" name="cover_image" accept="image/jpeg,image/png,image/webp" />
+          <span class="error-text"></span>
         </div>
+
+        <p class="form-hint">New events start unverified and stay hidden from students until an administrator verifies them.</p>
 
         <div class="form-actions">
           <button type="submit" class="btn btn-primary" id="submit-btn">Create Event</button>
         </div>
       </form>
-
-      <div id="cover-upload-section" style="display:none;margin-top:24px;border-top:1px solid var(--color-card-border);padding-top:24px;">
-        <h4>Add a cover image</h4>
-        <input type="file" id="cover-image-input" accept="image/*" />
-      </div>
+    </div>
     </div>
   </main>
 

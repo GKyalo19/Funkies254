@@ -1,12 +1,19 @@
+"""Routes mounted under /api/auth/."""
+
 from django.urls import path
 
-from . import views
+from apps.users.views import (
+    CsrfTokenView,
+    LoginView,
+    LogoutView,
+    RegisterView,
+    TokenRefreshView,
+)
 
 urlpatterns = [
-    path("register/", views.RegisterView.as_view(), name="auth-register"),
-    path("login/", views.LoginView.as_view(), name="auth-login"),
-    path("logout/", views.LogoutView.as_view(), name="auth-logout"),
-    path("token/refresh/", views.RefreshView.as_view(), name="auth-token-refresh"),
-    path("password-reset/request/", views.PasswordResetRequestView.as_view(), name="auth-password-reset-request"),
-    path("password-reset/confirm/", views.PasswordResetConfirmView.as_view(), name="auth-password-reset-confirm"),
+    path("register/", RegisterView.as_view(), name="auth-register"),
+    path("login/", LoginView.as_view(), name="auth-login"),
+    path("token/refresh/", TokenRefreshView.as_view(), name="auth-token-refresh"),
+    path("logout/", LogoutView.as_view(), name="auth-logout"),
+    path("csrf/", CsrfTokenView.as_view(), name="auth-csrf"),
 ]

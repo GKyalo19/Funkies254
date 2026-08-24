@@ -1,98 +1,171 @@
 """
-Rule-based event curation.
+Rule-based recommendation engine (§12).
 
-This is intentionally a plain scoring function, not a machine-learning
-model — at this stage there isn't enough interaction data (views, past
-registrations) to train anything meaningful, and a transparent, tunable
-rule set is easier to debug and explain to users ("why am I seeing this?").
-
-The public function `rank_events_for_user()` is the ONLY thing the view
-layer calls. When there's enough behavioural data later, this function's
-internals can be swapped for a real model (e.g. collaborative filtering
-with `scikit-learn` or `implicit`) without touching any API contracts —
-callers only ever see "a list of events, best match first".
+Deliberately transparent and free of machine learning: every point a candidate
+event scores is explained by a named rule, and ties break on the soonest start
+time then the event id, so the ranking is deterministic. Organizer follows and
+featured events are intentionally absent because those tables are not part of
+the confirmed schema (§12, §20).
 """
-from datetime import timedelta
+
+from dataclasses import dataclass, field
 
 from django.utils import timezone
 
 from apps.events.models import Event
-from apps.organizers.models import Follow
 
-# Tunable weights — kept as named constants so the scoring logic reads like
-# a rubric and is easy to adjust after watching real usage.
-WEIGHT_CATEGORY_MATCH = 10
-WEIGHT_EDUCATION_LEVEL_MATCH = 6
-WEIGHT_LOCATION_MATCH = 5
-WEIGHT_FOLLOWED_ORGANIZER = 8
-WEIGHT_FEATURED = 6
-WEIGHT_SOON_MAX_BONUS = 5
-CANDIDATE_POOL_SIZE = 300
+CATEGORY_OVERLAP_POINTS = 3.0
+CATEGORY_OVERLAP_MAX = 9.0
+SCHOOL_LEVEL_POINTS = 2.5
+LOCATION_POINTS = 2.0
+INSTITUTION_POINTS = 1.5
+HAPPENING_SOON_POINTS = 1.0
+HAPPENING_SOON_DAYS = 14
 
 
-def _base_queryset():
-    now = timezone.now()
-    return (
-        Event.objects.filter(status="published", start_datetime__gte=now)
-        .select_related("organizer")
-        .prefetch_related("categories")
-        .order_by("start_datetime")[:CANDIDATE_POOL_SIZE]
+@dataclass
+class RecommendationProfile:
+    """The signals a rule may consult, extracted once per request."""
+
+    category_slugs: set = field(default_factory=set)
+    school_level_id: str = None
+    location_terms: set = field(default_factory=set)
+    institution_id: str = None
+
+    @property
+    def is_empty(self) -> bool:
+        return not (
+            self.category_slugs
+            or self.school_level_id
+            or self.location_terms
+            or self.institution_id
+        )
+
+
+@dataclass
+class ScoredEvent:
+    event: Event
+    score: float
+    reasons: list
+
+
+def build_profile(user) -> RecommendationProfile:
+    if user is None or not user.is_authenticated:
+        return RecommendationProfile()
+
+    profile = RecommendationProfile(institution_id=user.institution_id)
+
+    preference = getattr(user, "preference", None)
+    if preference is not None:
+        profile.category_slugs = set(
+            preference.preferred_categories.values_list("slug", flat=True)
+        )
+        profile.school_level_id = preference.school_level_id
+
+    if user.institution_id and user.institution.location:
+        profile.location_terms = _location_terms(user.institution.location)
+
+    return profile
+
+
+def score_event(event: Event, profile: RecommendationProfile) -> ScoredEvent:
+    score = 0.0
+    reasons = []
+
+    if profile.category_slugs:
+        overlap = profile.category_slugs.intersection(
+            category.slug for category in event.categories.all()
+        )
+        if overlap:
+            points = min(len(overlap) * CATEGORY_OVERLAP_POINTS, CATEGORY_OVERLAP_MAX)
+            score += points
+            reasons.append(
+                {
+                    "rule": "category_overlap",
+                    "points": points,
+                    "detail": f"Matches your interests: {', '.join(sorted(overlap))}.",
+                }
+            )
+
+    if profile.school_level_id and event.school_level_id == profile.school_level_id:
+        score += SCHOOL_LEVEL_POINTS
+        reasons.append(
+            {
+                "rule": "school_level_match",
+                "points": SCHOOL_LEVEL_POINTS,
+                "detail": "Targets your school level.",
+            }
+        )
+
+    if profile.location_terms and _location_terms(event.location or event.venue or "") & (
+        profile.location_terms
+    ):
+        score += LOCATION_POINTS
+        reasons.append(
+            {
+                "rule": "location_match",
+                "points": LOCATION_POINTS,
+                "detail": "Happening near you.",
+            }
+        )
+
+    if profile.institution_id and event.institution_id == profile.institution_id:
+        score += INSTITUTION_POINTS
+        reasons.append(
+            {
+                "rule": "institution_match",
+                "points": INSTITUTION_POINTS,
+                "detail": "Hosted by your institution.",
+            }
+        )
+
+    days_away = (event.start_time - timezone.now()).total_seconds() / 86400
+    if 0 <= days_away <= HAPPENING_SOON_DAYS:
+        points = round(
+            HAPPENING_SOON_POINTS * (1 - days_away / HAPPENING_SOON_DAYS), 3
+        )
+        if points > 0:
+            score += points
+            reasons.append(
+                {
+                    "rule": "happening_soon",
+                    "points": points,
+                    "detail": "Starting soon.",
+                }
+            )
+
+    return ScoredEvent(event=event, score=round(score, 3), reasons=reasons)
+
+
+def recommend_events(*, user=None, limit=20, candidate_pool=200) -> list:
+    """
+    Return the highest scoring upcoming events for ``user``.
+
+    Anonymous visitors get the deterministic fallback: the soonest upcoming
+    verified events.
+    """
+    profile = build_profile(user)
+    candidates = list(
+        Event.objects.with_related()
+        .visible_to(user)
+        .verified()
+        .upcoming()
+        .order_by("start_time", "id")[:candidate_pool]
     )
 
+    if profile.is_empty:
+        return [ScoredEvent(event=event, score=0.0, reasons=[]) for event in candidates[:limit]]
 
-def _soonness_bonus(event, now):
-    """Events happening sooner get a small linear bonus, capped at WEIGHT_SOON_MAX_BONUS."""
-    days_until = (event.start_datetime - now).days
-    if days_until <= 0:
-        return WEIGHT_SOON_MAX_BONUS
-    return max(0, WEIGHT_SOON_MAX_BONUS - (days_until / 7))
-
-
-def _score_event(event, preference, followed_organizer_ids, now):
-    score = 0.0
-
-    if preference is not None:
-        event_category_ids = {c.id for c in event.categories.all()}
-        preferred_category_ids = set(preference.categories.values_list("id", flat=True))
-        matches = len(event_category_ids & preferred_category_ids)
-        score += matches * WEIGHT_CATEGORY_MATCH
-
-        if not preference.education_levels or event.education_level in preference.education_levels or event.education_level == "both":
-            score += WEIGHT_EDUCATION_LEVEL_MATCH
-
-        if not preference.preferred_locations or event.location in preference.preferred_locations:
-            score += WEIGHT_LOCATION_MATCH
-
-        days_until = (event.start_datetime - now).days
-        if days_until > preference.max_days_ahead:
-            score -= WEIGHT_CATEGORY_MATCH  # soft penalty, not a hard exclusion
-
-    if event.organizer_id in followed_organizer_ids:
-        score += WEIGHT_FOLLOWED_ORGANIZER
-
-    if event.is_featured:
-        score += WEIGHT_FEATURED
-
-    score += _soonness_bonus(event, now)
-    return score
+    scored = [score_event(event, profile) for event in candidates]
+    scored.sort(key=lambda item: (-item.score, item.event.start_time, str(item.event.id)))
+    return scored[:limit]
 
 
-def rank_events_for_user(user, limit=20):
-    """
-    Returns up to `limit` upcoming, published events ordered best-match-first
-    for `user`. Anonymous users (or students with no preferences saved yet)
-    get a sensible default: featured events first, then soonest.
-    """
-    now = timezone.now()
-    candidates = list(_base_queryset())
-
-    preference = None
-    followed_organizer_ids = set()
-    if user is not None and user.is_authenticated:
-        preference = getattr(user, "preference", None)
-        followed_organizer_ids = set(Follow.objects.filter(user=user).values_list("organizer_id", flat=True))
-
-    scored = [(_score_event(event, preference, followed_organizer_ids, now), event) for event in candidates]
-    scored.sort(key=lambda pair: (-pair[0], pair[1].start_datetime))
-
-    return [event for _score, event in scored[:limit]]
+def _location_terms(value: str) -> set:
+    """Cheap, provider-neutral token match; geocoding stays out of the database (§4.4)."""
+    tokens = {
+        token.strip(",.;:()").lower()
+        for token in (value or "").split()
+        if len(token.strip(",.;:()")) > 2
+    }
+    return tokens

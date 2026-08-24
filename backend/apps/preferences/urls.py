@@ -1,7 +1,9 @@
+"""Routes mounted under /api/."""
+
 from django.urls import path
 
-from .views import MyPreferenceView
+from apps.preferences.views import MyPreferenceView
 
 urlpatterns = [
-    path("me/", MyPreferenceView.as_view(), name="preferences-me"),
+    path("preferences/me/", MyPreferenceView.as_view(), name="preference-me"),
 ]

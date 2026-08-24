@@ -1,59 +1,90 @@
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+"""Custom user model (§4.1, §8)."""
+
+from django.contrib.auth.base_user import AbstractBaseUser
+from django.contrib.auth.models import PermissionsMixin
 from django.db import models
 
-from .managers import UserManager
+from apps.common.enums import ADMIN_ROLES, UserRole
+from apps.common.models import UUIDPrimaryKeyModel
+from apps.users.managers import UserManager
 
 
-class EducationLevel(models.TextChoices):
+class User(AbstractBaseUser, PermissionsMixin, UUIDPrimaryKeyModel):
     """
-    Shared with apps.preferences and apps.events — a student's own level and
-    an event's target audience are compared using these same three values.
-    """
+    Application user.
 
-    HIGH_SCHOOL = "high_school", "High School"
-    COLLEGE = "college", "College"
-    BOTH = "both", "High School & College"
-
-
-class User(AbstractBaseUser, PermissionsMixin):
-    """
-    Custom user model, keyed by email instead of a separate username.
-
-    `institution` captures the student's school/college (shown on the
-    Register page in Figma) and later feeds into event recommendations
-    (e.g. events hosted at or near the student's own school).
+    The password hash comes from AbstractBaseUser; there is deliberately no
+    plaintext password column (§4.1). ``role`` carries application semantics
+    while ``is_staff``/``is_superuser`` carry Django admin semantics.
     """
 
-    email = models.EmailField(unique=True)
-    first_name = models.CharField(max_length=150, blank=True)
-    last_name = models.CharField(max_length=150, blank=True)
-    institution = models.CharField(
-        max_length=255, blank=True, help_text="School/college the student is affiliated with."
+    email = models.EmailField(unique=True, max_length=254)
+    name = models.CharField(max_length=150)
+    avatar_url = models.TextField(
+        null=True, blank=True, help_text="Supabase Storage URL for the avatar."
     )
-    education_level = models.CharField(
-        max_length=20, choices=EducationLevel.choices, default=EducationLevel.HIGH_SCHOOL
+    role = models.CharField(
+        max_length=32, choices=UserRole.choices, default=UserRole.STUDENT
     )
-    phone_number = models.CharField(max_length=32, blank=True)
-    avatar_url = models.URLField(blank=True, help_text="Public Supabase Storage URL.")
-
-    is_active = models.BooleanField(default=True)
+    institution = models.ForeignKey(
+        "organizers.Institution",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="members",
+        db_column="institution_id",
+    )
+    is_active = models.BooleanField(
+        default=True, help_text="Inactive accounts cannot authenticate."
+    )
     is_staff = models.BooleanField(
-        default=False, help_text="Staff accounts can curate events/organizers via the admin."
+        default=False, help_text="Grants access to the Django admin site."
     )
-    date_joined = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     objects = UserManager()
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = []
+    EMAIL_FIELD = "email"
+    REQUIRED_FIELDS = ["name"]
 
     class Meta:
-        ordering = ["-date_joined"]
+        db_table = "users"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["email"], name="users_email_idx"),
+            models.Index(fields=["institution"], name="users_institution_idx"),
+            models.Index(fields=["role"], name="users_role_idx"),
+        ]
 
     def __str__(self):
         return self.email
 
+    def save(self, *args, **kwargs):
+        if self.email:
+            self.email = UserManager.normalize_login_email(self.email)
+        super().save(*args, **kwargs)
+
+    def get_full_name(self):
+        return self.name
+
+    def get_short_name(self):
+        return self.name.split(" ")[0] if self.name else self.email
+
     @property
-    def full_name(self):
-        return f"{self.first_name} {self.last_name}".strip() or self.email
+    def is_student(self) -> bool:
+        return self.role == UserRole.STUDENT
+
+    @property
+    def is_institution_staff(self) -> bool:
+        return self.role == UserRole.INSTITUTION_STAFF
+
+    @property
+    def is_platform_admin(self) -> bool:
+        """True for admin and super_admin — the platform-wide curator roles."""
+        return self.role in ADMIN_ROLES
+
+    @property
+    def is_super_admin(self) -> bool:
+        return self.role == UserRole.SUPER_ADMIN

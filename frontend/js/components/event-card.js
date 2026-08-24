@@ -3,6 +3,18 @@ import { escapeHtml, formatShortDate } from "../utils/dom.js";
 
 const DEFAULT_COVER = "/assets/images/event-cover-default.jpg";
 
+/**
+ * Pulls plain events out of whatever the endpoint returned.
+ *
+ * `/events/` and `/users/me/saved-events/` are paginated, `/recommendations/feed/`
+ * wraps each event in a `{score, reasons, event}` envelope, and some callers
+ * already hold a plain array — this flattens all three into `Event[]`.
+ */
+export function toEventList(payload) {
+  const items = Array.isArray(payload) ? payload : payload?.results || [];
+  return items.map((item) => item?.event || item).filter(Boolean);
+}
+
 export function createEventCard(event) {
   // A real <a href> (not a click-listener on a <div>) so the card is a proper
   // link: keyboard-focusable, works with "open in new tab", crawlable, and
@@ -11,16 +23,17 @@ export function createEventCard(event) {
   card.className = "event-card";
   card.href = `/pages/event.html?slug=${encodeURIComponent(event.slug)}`;
   const cover = event.cover_image_url || DEFAULT_COVER;
+  const subtitle = event.institution?.name || event.location || event.venue || "";
   card.innerHTML = `
     <div class="cover">
-      ${event.is_featured ? '<span class="badge">Featured</span>' : ""}
-      <img src="${cover}" alt="${escapeHtml(event.title)}" loading="lazy" />
+      ${event.is_virtual ? '<span class="badge">Virtual</span>' : ""}
+      <img src="${escapeHtml(cover)}" alt="${escapeHtml(event.title)}" loading="lazy" />
     </div>
     <div class="overlay"></div>
     <div class="body">
       <h3>${escapeHtml(event.title)}</h3>
-      <p class="meta">${escapeHtml(event.organizer_name || event.location)}</p>
-      <p class="meta">${formatShortDate(event.start_datetime)}</p>
+      <p class="meta">${escapeHtml(subtitle)}</p>
+      <p class="meta">${formatShortDate(event.start_time)}</p>
     </div>
   `;
   return card;

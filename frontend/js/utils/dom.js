@@ -19,10 +19,16 @@ export function getQueryParam(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
 
-/** Serialises a <form> into a plain object, skipping empty optional fields. */
-export function formToObject(form) {
+/**
+ * Serialises a <form> into a plain object.
+ *
+ * With `{ omitEmpty: true }`, blank inputs are left out entirely — needed for
+ * optional nullable API fields that reject "" but accept an absent key.
+ */
+export function formToObject(form, { omitEmpty = false } = {}) {
   const data = {};
   new FormData(form).forEach((value, key) => {
+    if (omitEmpty && typeof value === "string" && value.trim() === "") return;
     data[key] = value;
   });
   return data;
@@ -43,30 +49,42 @@ export function applyFieldErrors(form, fields) {
   });
 }
 
-export function formatDate(isoString) {
+/** Returns a valid Date, or null — so a missing/garbled timestamp renders as "" rather than "Invalid Date". */
+function parseDate(isoString) {
+  if (!isoString) return null;
   const date = new Date(isoString);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function formatDate(isoString) {
+  const date = parseDate(isoString);
+  if (!date) return "";
   return date.toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 
 /** Compact date for event cards, e.g. "Nov 27th". */
 export function formatShortDate(isoString) {
-  const date = new Date(isoString);
+  const date = parseDate(isoString);
+  if (!date) return "";
   const day = date.getDate();
   const suffix = day % 10 === 1 && day !== 11 ? "st" : day % 10 === 2 && day !== 12 ? "nd" : day % 10 === 3 && day !== 13 ? "rd" : "th";
   return `${date.toLocaleDateString("en-KE", { month: "short" })} ${day}${suffix}`;
 }
 
 export function formatTimeRange(startIso, endIso) {
-  const start = new Date(startIso);
+  const start = parseDate(startIso);
+  if (!start) return "";
   const startTime = start.toLocaleTimeString("en-KE", { hour: "numeric", minute: "2-digit" });
-  if (!endIso) return startTime;
-  const end = new Date(endIso);
+  const end = parseDate(endIso);
+  if (!end) return startTime;
   const endTime = end.toLocaleTimeString("en-KE", { hour: "numeric", minute: "2-digit" });
   return `${startTime} - ${endTime}`;
 }
 
-export function formatFee(fee) {
-  const amount = Number(fee);
-  if (amount === 0) return "Free";
-  return `KES ${amount.toLocaleString()}`;
+/** Formats an ISO timestamp for a <input type="datetime-local"> value, in local time. */
+export function toDatetimeLocalValue(isoString) {
+  const date = parseDate(isoString);
+  if (!date) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

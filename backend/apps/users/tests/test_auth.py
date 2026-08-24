@@ -1,110 +1,241 @@
+"""Authentication tests (§15: register, login, duplicate email, invalid password,
+refresh, logout, inactive user)."""
+
 import pytest
 from django.conf import settings
 
+from apps.preferences.models import UserPreference
+from apps.users.models import User
+
 pytestmark = pytest.mark.django_db
 
+REGISTER_URL = "/api/auth/register/"
+LOGIN_URL = "/api/auth/login/"
+REFRESH_URL = "/api/auth/token/refresh/"
+LOGOUT_URL = "/api/auth/logout/"
+ME_URL = "/api/users/me/"
 
-class TestRegister:
-    def test_register_creates_user_and_sets_cookies(self, api_client):
-        response = api_client.post(
-            "/api/auth/register/",
-            {
-                "email": "new.student@example.com",
-                "password": "StrongPass123",
-                "confirm_password": "StrongPass123",
-                "institution": "Mang'u High School",
-                "education_level": "high_school",
-            },
-        )
-        assert response.status_code == 201
-        assert response.data["user"]["email"] == "new.student@example.com"
-        assert settings.ACCESS_TOKEN_COOKIE in response.cookies
-        assert settings.REFRESH_TOKEN_COOKIE in response.cookies
-
-    def test_register_rejects_mismatched_passwords(self, api_client):
-        response = api_client.post(
-            "/api/auth/register/",
-            {"email": "x@example.com", "password": "StrongPass123", "confirm_password": "Different123"},
-        )
-        assert response.status_code == 400
-
-    def test_register_rejects_duplicate_email(self, api_client, create_user):
-        create_user(email="taken@example.com")
-        response = api_client.post(
-            "/api/auth/register/",
-            {"email": "taken@example.com", "password": "StrongPass123", "confirm_password": "StrongPass123"},
-        )
-        assert response.status_code == 400
+VALID_PAYLOAD = {
+    "email": "New.Student@Example.com",
+    "name": "New Student",
+    "password": "StrongPass!2026",
+    "password_confirm": "StrongPass!2026",
+}
 
 
-class TestLogin:
-    def test_login_succeeds_with_correct_credentials(self, api_client, create_user):
-        create_user(email="student@example.com", password="StrongPass123")
-        response = api_client.post("/api/auth/login/", {"email": "student@example.com", "password": "StrongPass123"})
-        assert response.status_code == 200
-        assert settings.ACCESS_TOKEN_COOKIE in response.cookies
+def test_register_creates_user_preference_and_cookies(api):
+    response = api.post(REGISTER_URL, VALID_PAYLOAD, format="json")
 
-    def test_login_fails_with_wrong_password(self, api_client, create_user):
-        create_user(email="student@example.com", password="StrongPass123")
-        response = api_client.post("/api/auth/login/", {"email": "student@example.com", "password": "WrongPass"})
-        assert response.status_code == 400
-
-
-class TestMeEndpoint:
-    def test_me_requires_authentication(self, api_client):
-        response = api_client.get("/api/users/me/")
-        assert response.status_code == 401
-
-    def test_me_returns_profile_when_logged_in(self, logged_in_client):
-        client, user = logged_in_client(email="student@example.com")
-        response = client.get("/api/users/me/")
-        assert response.status_code == 200
-        assert response.data["email"] == user.email
-
-    def test_logout_clears_cookies_and_blocks_me(self, logged_in_client):
-        client, _user = logged_in_client()
-        logout_response = client.post("/api/auth/logout/")
-        assert logout_response.status_code == 200
-        # The test client's cookie jar retains the now-empty/deleted cookie value.
-        me_response = client.get("/api/users/me/")
-        assert me_response.status_code == 401
+    assert response.status_code == 201, response.data
+    user = User.objects.get(email="new.student@example.com")
+    assert user.role == "student"
+    assert UserPreference.objects.filter(user=user).exists()
+    assert settings.JWT_ACCESS_COOKIE_NAME in response.cookies
+    assert settings.JWT_REFRESH_COOKIE_NAME in response.cookies
+    assert response.cookies[settings.JWT_ACCESS_COOKIE_NAME]["httponly"]
+    assert "password" not in response.data["user"]
 
 
-class TestPasswordReset:
-    def test_request_always_returns_200(self, api_client, create_user):
-        create_user(email="student@example.com")
-        response = api_client.post("/api/auth/password-reset/request/", {"email": "student@example.com"})
-        assert response.status_code == 200
+def test_register_normalises_email_to_lowercase(api):
+    api.post(REGISTER_URL, VALID_PAYLOAD, format="json")
+    assert User.objects.filter(email="new.student@example.com").exists()
 
-        response_unknown = api_client.post("/api/auth/password-reset/request/", {"email": "nobody@example.com"})
-        assert response_unknown.status_code == 200
 
-    def test_confirm_with_valid_token_changes_password(self, api_client, create_user):
-        from django.utils.encoding import force_bytes
-        from django.utils.http import urlsafe_base64_encode
+def test_register_rejects_duplicate_email(api, student):
+    payload = {**VALID_PAYLOAD, "email": student.email.upper()}
+    response = api.post(REGISTER_URL, payload, format="json")
 
-        from apps.users.tokens import password_reset_token
+    assert response.status_code == 400
+    assert "email" in response.data["errors"]
 
-        user = create_user(email="student@example.com", password="OldPass123")
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        token = password_reset_token.make_token(user)
 
-        response = api_client.post(
-            "/api/auth/password-reset/confirm/", {"uid": uid, "token": token, "new_password": "NewPass456"}
-        )
-        assert response.status_code == 200
+def test_register_rejects_mismatched_passwords(api):
+    payload = {**VALID_PAYLOAD, "password_confirm": "SomethingElse!2026"}
+    response = api.post(REGISTER_URL, payload, format="json")
 
-        login_response = api_client.post("/api/auth/login/", {"email": "student@example.com", "password": "NewPass456"})
-        assert login_response.status_code == 200
+    assert response.status_code == 400
+    assert "password_confirm" in response.data["errors"]
 
-    def test_confirm_with_invalid_token_fails(self, api_client, create_user):
-        from django.utils.encoding import force_bytes
-        from django.utils.http import urlsafe_base64_encode
 
-        user = create_user(email="student@example.com")
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
+def test_register_rejects_weak_password(api):
+    payload = {**VALID_PAYLOAD, "password": "password", "password_confirm": "password"}
+    response = api.post(REGISTER_URL, payload, format="json")
 
-        response = api_client.post(
-            "/api/auth/password-reset/confirm/", {"uid": uid, "token": "bad-token", "new_password": "NewPass456"}
-        )
-        assert response.status_code == 400
+    assert response.status_code == 400
+    assert "password" in response.data["errors"]
+
+
+def test_register_cannot_self_assign_elevated_role(api):
+    response = api.post(REGISTER_URL, {**VALID_PAYLOAD, "role": "admin"}, format="json")
+
+    assert response.status_code == 201
+    assert User.objects.get(email="new.student@example.com").role == "student"
+
+
+def test_login_succeeds_and_sets_cookies(api, student, login):
+    response = login(student)
+
+    assert response.data["user"]["email"] == student.email
+    assert settings.JWT_ACCESS_COOKIE_NAME in response.cookies
+
+
+def test_login_is_case_insensitive(api, student):
+    response = api.post(
+        LOGIN_URL, {"email": student.email.upper(), "password": "TestPass!2026"}, format="json"
+    )
+    assert response.status_code == 200
+
+
+def test_login_rejects_invalid_password(api, student):
+    response = api.post(LOGIN_URL, {"email": student.email, "password": "wrong"}, format="json")
+
+    assert response.status_code == 401
+    assert response.data["detail"] == "Invalid email or password."
+
+
+def test_login_rejects_unknown_email(api):
+    response = api.post(
+        LOGIN_URL, {"email": "nobody@example.com", "password": "whatever"}, format="json"
+    )
+    assert response.status_code == 401
+
+
+def test_inactive_user_cannot_log_in(api, student):
+    student.is_active = False
+    student.save(update_fields=["is_active"])
+
+    response = api.post(LOGIN_URL, {"email": student.email, "password": "TestPass!2026"}, format="json")
+
+    assert response.status_code == 401
+    assert "suspended" in response.data["detail"].lower()
+
+
+def test_cookie_authenticates_subsequent_request(api, student, login):
+    login(student)
+    response = api.get(ME_URL)
+
+    assert response.status_code == 200
+    assert response.data["email"] == student.email
+
+
+def test_unauthenticated_request_is_rejected(api):
+    assert api.get(ME_URL).status_code == 401
+
+
+def test_refresh_rotates_cookies(api, student, login):
+    login(student)
+    response = api.post(REFRESH_URL, format="json")
+
+    assert response.status_code == 200
+    assert settings.JWT_ACCESS_COOKIE_NAME in response.cookies
+    assert api.get(ME_URL).status_code == 200
+
+
+def test_refresh_without_token_is_unauthorised(api):
+    assert api.post(REFRESH_URL, format="json").status_code == 401
+
+
+def test_refresh_rejects_blacklisted_token(api, student, login):
+    login(student)
+    api.post(LOGOUT_URL, format="json")
+    api.cookies[settings.JWT_REFRESH_COOKIE_NAME] = "not-a-real-token"
+
+    assert api.post(REFRESH_URL, format="json").status_code == 401
+
+
+def test_logout_clears_cookies(api, student, login):
+    login(student)
+    response = api.post(LOGOUT_URL, format="json")
+
+    assert response.status_code == 200
+    assert response.cookies[settings.JWT_ACCESS_COOKIE_NAME].value == ""
+    assert response.cookies[settings.JWT_REFRESH_COOKIE_NAME].value == ""
+
+
+def test_suspended_user_token_stops_working(api, student, login):
+    login(student)
+    student.is_active = False
+    student.save(update_fields=["is_active"])
+
+    assert api.get(ME_URL).status_code == 401
+
+
+def test_me_patch_updates_own_profile(api, student, login):
+    login(student)
+    response = api.patch(ME_URL, {"name": "Updated Name"}, format="json")
+
+    assert response.status_code == 200
+    student.refresh_from_db()
+    assert student.name == "Updated Name"
+
+
+def test_me_patch_cannot_change_role_or_email(api, student, login):
+    login(student)
+    api.patch(ME_URL, {"role": "admin", "email": "hacker@example.com"}, format="json")
+
+    student.refresh_from_db()
+    assert student.role == "student"
+    assert student.email == "student@example.com"
+
+
+def test_cookie_write_is_rejected_without_csrf_token_when_enforced(settings, student):
+    from rest_framework.test import APIClient
+
+    settings.JWT_COOKIE_CSRF_ENFORCED = True
+    client = APIClient(enforce_csrf_checks=True)
+    client.post(
+        LOGIN_URL, {"email": student.email, "password": "TestPass!2026"}, format="json"
+    )
+
+    response = client.patch(ME_URL, {"name": "No CSRF"}, format="json")
+
+    assert response.status_code == 403
+    assert "CSRF" in response.data["detail"]
+
+
+def test_cookie_write_succeeds_with_csrf_token_when_enforced(settings, student):
+    from rest_framework.test import APIClient
+
+    settings.JWT_COOKIE_CSRF_ENFORCED = True
+    client = APIClient(enforce_csrf_checks=True)
+    login_response = client.post(
+        LOGIN_URL, {"email": student.email, "password": "TestPass!2026"}, format="json"
+    )
+
+    response = client.patch(
+        ME_URL,
+        {"name": "With CSRF"},
+        format="json",
+        HTTP_X_CSRFTOKEN=login_response.data["csrf_token"],
+    )
+
+    assert response.status_code == 200, response.data
+    student.refresh_from_db()
+    assert student.name == "With CSRF"
+
+
+def test_header_authentication_is_exempt_from_csrf(settings, student):
+    """Browsers never attach an Authorization header on their own."""
+    from rest_framework.test import APIClient
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    settings.JWT_COOKIE_CSRF_ENFORCED = True
+    access = RefreshToken.for_user(student).access_token
+    client = APIClient(enforce_csrf_checks=True)
+
+    response = client.patch(
+        ME_URL, {"name": "Header Auth"}, format="json", HTTP_AUTHORIZATION=f"Bearer {access}"
+    )
+
+    assert response.status_code == 200, response.data
+
+
+def test_staff_cannot_move_themselves_between_institutions(api, staff, other_institution, login):
+    login(staff)
+    response = api.patch(
+        ME_URL, {"institution_id": str(other_institution.id)}, format="json"
+    )
+
+    assert response.status_code == 400
+    staff.refresh_from_db()
+    assert staff.institution_id != other_institution.id

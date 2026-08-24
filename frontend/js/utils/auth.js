@@ -41,8 +41,28 @@ export async function logout() {
 
 export function initials(user) {
   if (!user) return "?";
-  const name = (user.full_name || user.email || "").trim();
+  const name = (user.name || user.email || "").trim();
   const parts = name.split(" ").filter(Boolean);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return name.slice(0, 2).toUpperCase();
+}
+
+/** Best available label for a user — falls back to the email if no name is set. */
+export function displayName(user) {
+  if (!user) return "";
+  return user.name?.trim() || user.email || "";
+}
+
+/** First name only, for greetings. */
+export function firstName(user) {
+  return displayName(user).split(" ")[0] || "";
+}
+
+/** True for the roles allowed to create events (§10.1). `is_staff` is Django-admin only. */
+export function canManageEvents(user) {
+  return ["institution_staff", "admin", "super_admin"].includes(user?.role);
+}
+
+export function isStudent(user) {
+  return user?.role === "student";
 }

@@ -2,19 +2,24 @@ import { renderFooter } from "../components/footer.js";
 import { renderHeader } from "../components/header.js";
 import { api, ApiError } from "../utils/api.js";
 import { clearCurrentUserCache, initials, requireAuth } from "../utils/auth.js";
-import { formToObject, qs } from "../utils/dom.js";
+import { applyFieldErrors, qs } from "../utils/dom.js";
 import { toast } from "../utils/toast.js";
+
+const ROLE_LABELS = {
+  student: "Student",
+  institution_staff: "Institution staff",
+  admin: "Admin",
+  super_admin: "Super admin",
+};
 
 let currentUser = null;
 
 function fillForm(user) {
   const form = qs("#profile-form");
-  form.first_name.value = user.first_name || "";
-  form.last_name.value = user.last_name || "";
+  form.name.value = user.name || "";
   form.email.value = user.email || "";
-  form.institution.value = user.institution || "";
-  form.education_level.value = user.education_level || "high_school";
-  form.phone_number.value = user.phone_number || "";
+  qs("#role").value = ROLE_LABELS[user.role] || user.role || "";
+  qs("#institution").value = user.institution?.name || "Not linked to an institution";
 
   const avatarMount = qs("#sidebar-avatar");
   avatarMount.innerHTML = user.avatar_url
@@ -29,15 +34,19 @@ async function handleSave(event) {
   saveBtn.disabled = true;
   saveBtn.textContent = "Saving...";
 
-  const payload = formToObject(form);
-  delete payload.email; // read-only field, never sent
-
   try {
-    currentUser = await api.patch("/users/me/", payload);
+    // `name` is the only self-editable field on /users/me/.
+    currentUser = await api.patch("/users/me/", { name: form.name.value.trim() });
     clearCurrentUserCache();
+    fillForm(currentUser);
     toast.success("Profile updated.");
   } catch (err) {
-    toast.error(err instanceof ApiError ? err.message : "Could not save changes.");
+    if (err instanceof ApiError) {
+      applyFieldErrors(form, err.fields);
+      toast.error(err.message);
+    } else {
+      toast.error("Could not save changes.");
+    }
   } finally {
     saveBtn.disabled = false;
     saveBtn.textContent = "Save Changes";
@@ -52,12 +61,14 @@ async function handleAvatarUpload(event) {
   formData.append("avatar", file);
 
   try {
-    currentUser = await api.upload("/users/me/avatar/", formData);
+    currentUser = await api.upload("/users/me/", formData, "PATCH");
     clearCurrentUserCache();
     fillForm(currentUser);
     toast.success("Photo updated.");
   } catch (err) {
     toast.error(err instanceof ApiError ? err.message : "Could not upload photo.");
+  } finally {
+    event.target.value = "";
   }
 }
 
