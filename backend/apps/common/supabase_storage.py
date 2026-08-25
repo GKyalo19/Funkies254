@@ -12,6 +12,7 @@ import uuid
 from urllib.parse import quote
 
 import requests
+from PIL import Image, UnidentifiedImageError
 from django.conf import settings
 from rest_framework import status
 
@@ -38,9 +39,11 @@ def is_configured() -> bool:
 
 
 def validate_image(upload) -> None:
-    """Validate content type and size before spending a network round trip."""
+    """Validate size, declared MIME type, and actual image format."""
+
     content_type = (getattr(upload, "content_type", "") or "").lower()
     allowed = [item.lower() for item in settings.UPLOAD_ALLOWED_IMAGE_TYPES]
+
     if content_type not in allowed:
         raise UploadValidationError(
             f"Unsupported file type '{content_type or 'unknown'}'. "
@@ -50,7 +53,41 @@ def validate_image(upload) -> None:
     size = getattr(upload, "size", None)
     if size is not None and size > settings.UPLOAD_MAX_BYTES:
         limit_mb = settings.UPLOAD_MAX_BYTES / (1024 * 1024)
-        raise UploadValidationError(f"File is larger than the {limit_mb:.1f} MB limit.")
+        raise UploadValidationError(
+            f"File is larger than the {limit_mb:.1f} MB limit."
+        )
+
+    try:
+        upload.seek(0)
+        image = Image.open(upload)
+
+        actual_format = (image.format or "").upper()
+
+        allowed_formats = {
+            "JPEG": "image/jpeg",
+            "PNG": "image/png",
+            "WEBP": "image/webp",
+        }
+
+        actual_content_type = allowed_formats.get(actual_format)
+
+        if actual_content_type not in allowed:
+            raise UploadValidationError(
+                f"Invalid image format '{actual_format or 'unknown'}'."
+            )
+
+        image.verify()
+
+    except UploadValidationError:
+        raise
+
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise UploadValidationError(
+            "The uploaded file is not a valid image."
+        ) from exc
+
+    finally:
+        upload.seek(0)
 
 
 def build_object_path(prefix: str, upload, owner_id=None) -> str:
@@ -100,7 +137,7 @@ def upload(bucket: str, path: str, upload_file, *, content_type=None) -> str:
                 **_headers(),
                 "Content-Type": content_type
                 or getattr(upload_file, "content_type", "application/octet-stream"),
-                "x-upsert": "true",
+                "x-upsert": "false",
                 "cache-control": "3600",
             },
             timeout=settings.SUPABASE_STORAGE_TIMEOUT,
@@ -157,11 +194,21 @@ def replace(bucket: str, previous_url, path: str, upload_file, *, content_type=N
 
 def upload_event_cover(upload_file, event_id=None) -> str:
     validate_image(upload_file)
-    path = build_object_path("events", upload_file, event_id)
-    return upload(EVENT_COVERS, path, upload_file)
+    path = build_object_path("event-covers", upload_file, event_id)
+    return upload(
+        EVENT_COVERS,
+        path,
+        upload_file,
+        content_type=upload_file.content_type,
+    )
 
 
 def upload_avatar(upload_file, user_id) -> str:
     validate_image(upload_file)
-    path = build_object_path("users", upload_file, user_id)
-    return upload(AVATARS, path, upload_file)
+    path = build_object_path("avatars", upload_file, user_id)
+    return upload(
+        AVATARS,
+        path,
+        upload_file,
+        content_type=upload_file.content_type,
+    )

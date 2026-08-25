@@ -6,6 +6,7 @@ object storage. See docs/DEPLOYMENT.md and docs/SECURITY.md.
 """
 
 from datetime import timedelta
+import os
 from pathlib import Path
 
 import dj_database_url
@@ -277,3 +278,17 @@ LOGGING = {
         "apps": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 }
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+EMAIL_HOST = config("EMAIL_HOST", default="")
+EMAIL_PORT = config("EMAIL_PORT", cast=int, default=2525)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool, default=True)
+
+DEFAULT_FROM_EMAIL = config(
+    "DEFAULT_FROM_EMAIL",
+    default="Funkies254 <no-reply@funkies254.com>",
+)
