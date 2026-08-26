@@ -20,6 +20,12 @@ form.addEventListener("submit", async (event) => {
     window.location.href = "/index.html";
   } catch (err) {
     if (err instanceof ApiError) {
+      if (err.code === "email_not_verified") {
+        const email = encodeURIComponent(payload.email || "");
+        toast.error("Please verify your email first. We can resend the code on the next page.");
+        window.location.href = `/pages/verify-email.html?email=${email}`;
+        return;
+      }
       applyFieldErrors(form, err.fields);
       toast.error(err.message);
     } else {

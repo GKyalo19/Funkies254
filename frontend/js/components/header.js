@@ -9,6 +9,7 @@
  */
 import { canManageEvents, displayName, getCurrentUser, initials, logout } from "../utils/auth.js";
 import { escapeHtml, qs } from "../utils/dom.js";
+import { avatarInnerHtml } from "../utils/media.js";
 
 function loggedOutMenu() {
   return `
@@ -69,7 +70,7 @@ export async function renderHeader(activeSearchValue = "") {
     panel.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;">
         <span class="avatar" style="width:36px;height:36px;font-size:14px;">
-          ${user.avatar_url ? `<img src="${escapeHtml(user.avatar_url)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : initials(user)}
+          ${avatarInnerHtml(user.avatar_url) || initials(user)}
         </span>
         <span style="font-weight:700;">${escapeHtml(displayName(user))}</span>
       </div>

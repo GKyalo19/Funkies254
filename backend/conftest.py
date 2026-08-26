@@ -15,6 +15,11 @@ from apps.users.models import User
 PASSWORD = "TestPass!2026"
 
 
+@pytest.fixture(autouse=True)
+def _locmem_email(settings):
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
+
 @pytest.fixture
 def api():
     return APIClient()
@@ -52,6 +57,7 @@ def other_institution(db):
 
 
 def _make_user(email, role, institution=None, **flags):
+    flags.setdefault("email_verified", True)
     user = User.objects.create_user(
         email=email, password=PASSWORD, name=email.split("@")[0].title(), role=role,
         institution=institution, **flags

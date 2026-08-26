@@ -11,7 +11,8 @@ from django.utils import timezone
 
 from apps.common import supabase_storage
 from apps.common.audit import log_action
-from apps.common.enums import AuditAction
+from apps.common.enums import AuditAction, UserRole
+from apps.common.mail import send_new_event_match_email
 from apps.events.models import Event, EventCategory, SavedEvent
 
 
@@ -40,6 +41,9 @@ def create_event(*, actor, categories=None, cover_image=None, **fields) -> Event
         event = Event.objects.create(created_by=actor, **fields)
         _set_categories(event, categories)
         log_action(actor=actor, action=AuditAction.CREATED_EVENT, instance=event)
+
+    if event.is_verified:
+        notify_users_of_matching_event(event, actor=actor)
 
     return event
 
@@ -79,17 +83,57 @@ def delete_event(*, actor, event: Event) -> None:
         transaction.on_commit(lambda: supabase_storage.delete(supabase_storage.EVENT_COVERS, path))
 
 
-@transaction.atomic
-def set_event_verified(*, actor, event: Event, verified: bool) -> Event:
-    event.is_verified = verified
-    event.verified_by = actor if verified else None
-    event.verified_at = timezone.now() if verified else None
-    event.save(update_fields=["is_verified", "verified_by", "verified_at", "updated_at"])
-    log_action(
-        actor=actor,
-        action=AuditAction.VERIFIED_EVENT if verified else AuditAction.UPDATED_EVENT,
-        instance=event,
+def notify_users_of_matching_event(event: Event, *, actor=None) -> int:
+    """Email students whose saved preferences overlap this event's categories."""
+    from django.db.models import Q
+
+    from apps.preferences.models import UserPreference
+
+    event_category_ids = set(event.categories.values_list("id", flat=True))
+    if not event_category_ids:
+        return 0
+
+    queryset = (
+        UserPreference.objects.filter(
+            email_notifications=True,
+            user__is_active=True,
+            user__email_verified=True,
+            user__role=UserRole.STUDENT,
+        )
+        .select_related("user")
+        .prefetch_related("preferred_categories")
     )
+    if actor is not None:
+        queryset = queryset.exclude(user=actor)
+    if event.school_level_id:
+        queryset = queryset.filter(
+            Q(school_level_id=event.school_level_id) | Q(school_level_id__isnull=True)
+        )
+
+    sent = 0
+    for preference in queryset:
+        preferred_ids = {category.id for category in preference.preferred_categories.all()}
+        if not preferred_ids or preferred_ids.isdisjoint(event_category_ids):
+            continue
+        if send_new_event_match_email(preference.user, event):
+            sent += 1
+    return sent
+
+
+def set_event_verified(*, actor, event: Event, verified: bool) -> Event:
+    was_verified = event.is_verified
+    with transaction.atomic():
+        event.is_verified = verified
+        event.verified_by = actor if verified else None
+        event.verified_at = timezone.now() if verified else None
+        event.save(update_fields=["is_verified", "verified_by", "verified_at", "updated_at"])
+        log_action(
+            actor=actor,
+            action=AuditAction.VERIFIED_EVENT if verified else AuditAction.UPDATED_EVENT,
+            instance=event,
+        )
+    if verified and not was_verified:
+        notify_users_of_matching_event(event, actor=actor)
     return event
 
 

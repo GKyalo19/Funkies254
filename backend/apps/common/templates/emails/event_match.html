@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; color: #1a1300; background: #f7f3ea; padding: 24px;">
+  <div style="max-width: 520px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 32px;">
+    <h1 style="margin: 0 0 16px; font-size: 22px;">New event for you</h1>
+    <p>Hi {{ user.get_short_name }},</p>
+    <p>A new event matches your preferences: <strong>{{ event.title }}</strong>.</p>
+    <p><strong>When:</strong> {{ event.start_time|date:"l j F Y, g:i A" }}<br><strong>Where:</strong> {{ where }}</p>
+    <p style="margin: 24px 0;">
+      <a href="{{ event_url }}" style="background: #dfb322; color: #1a1300; text-decoration: none; font-weight: 700; padding: 12px 24px; border-radius: 999px;">View event</a>
+    </p>
+    <p style="color: #6b6b6b; font-size: 14px;">You can turn these emails off anytime from your <a href="{{ frontend_base_url }}/pages/preferences.html">preferences</a>.</p>
+    <p style="margin-top: 32px;">— Funkies254</p>
+  </div>
+</body>
+</html>

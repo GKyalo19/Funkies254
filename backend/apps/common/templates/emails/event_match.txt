@@ -1,0 +1,12 @@
+Hi {{ user.get_short_name }},
+
+A new event matches your preferences: {{ event.title }}.
+
+When: {{ event.start_time|date:"l j F Y, g:i A" }}
+Where: {{ where }}
+
+View the event: {{ event_url }}
+
+You can turn these emails off anytime from your preferences page.
+
+— Funkies254

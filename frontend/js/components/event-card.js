@@ -1,7 +1,6 @@
 /** Renders a single event card — reused on the home feed, listings, and "similar events". */
 import { escapeHtml, formatShortDate } from "../utils/dom.js";
-
-const DEFAULT_COVER = "/assets/images/event-cover-default.jpg";
+import { coverInnerHtml } from "../utils/media.js";
 
 /**
  * Pulls plain events out of whatever the endpoint returned.
@@ -22,12 +21,11 @@ export function createEventCard(event) {
   const card = document.createElement("a");
   card.className = "event-card";
   card.href = `/pages/event.html?slug=${encodeURIComponent(event.slug)}`;
-  const cover = event.cover_image_url || DEFAULT_COVER;
   const subtitle = event.institution?.name || event.location || event.venue || "";
   card.innerHTML = `
     <div class="cover">
       ${event.is_virtual ? '<span class="badge">Virtual</span>' : ""}
-      <img src="${escapeHtml(cover)}" alt="${escapeHtml(event.title)}" loading="lazy" />
+      ${coverInnerHtml(event.cover_image_url, event.title)}
     </div>
     <div class="overlay"></div>
     <div class="body">

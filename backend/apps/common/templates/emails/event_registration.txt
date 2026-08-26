@@ -1,0 +1,11 @@
+Hi {{ user.get_short_name }},
+
+You're registered for {{ event.title }}.
+
+When: {{ event.start_time|date:"l j F Y, g:i A" }}
+Where: {{ where }}
+
+View the event: {{ event_url }}
+
+See you there!
+— Funkies254

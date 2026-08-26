@@ -171,6 +171,7 @@ class Command(BaseCommand):
             name=name,
             role=role,
             institution=institution,
+            email_verified=True,
             **flags,
         )
         UserPreference.objects.get_or_create(user=user)

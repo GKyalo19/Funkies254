@@ -23,17 +23,22 @@ VALID_PAYLOAD = {
 }
 
 
-def test_register_creates_user_preference_and_cookies(api):
+def test_register_creates_user_preference_and_sends_verification(api):
     response = api.post(REGISTER_URL, VALID_PAYLOAD, format="json")
 
     assert response.status_code == 201, response.data
     user = User.objects.get(email="new.student@example.com")
     assert user.role == "student"
+    assert user.email_verified is False
     assert UserPreference.objects.filter(user=user).exists()
-    assert settings.JWT_ACCESS_COOKIE_NAME in response.cookies
-    assert settings.JWT_REFRESH_COOKIE_NAME in response.cookies
-    assert response.cookies[settings.JWT_ACCESS_COOKIE_NAME]["httponly"]
-    assert "password" not in response.data["user"]
+    assert settings.JWT_ACCESS_COOKIE_NAME not in response.cookies
+    assert response.data["email"] == "new.student@example.com"
+    assert response.data["email_verified"] is False
+
+    from django.core import mail
+
+    assert len(mail.outbox) == 1
+    assert "verification code" in mail.outbox[0].subject.lower()
 
 
 def test_register_normalises_email_to_lowercase(api):
@@ -239,3 +244,69 @@ def test_staff_cannot_move_themselves_between_institutions(api, staff, other_ins
     assert response.status_code == 400
     staff.refresh_from_db()
     assert staff.institution_id != other_institution.id
+
+
+def _code_from_latest_email():
+    import re
+
+    from django.core import mail
+
+    assert mail.outbox, "expected a verification email"
+    match = re.search(r"\b(\d{6})\b", mail.outbox[-1].body)
+    assert match, mail.outbox[-1].body
+    return match.group(1)
+
+
+def test_verify_email_sets_cookies_and_marks_verified(api):
+    api.post(REGISTER_URL, VALID_PAYLOAD, format="json")
+    code = _code_from_latest_email()
+
+    response = api.post(
+        "/api/auth/verify-email/",
+        {"email": VALID_PAYLOAD["email"], "code": code},
+        format="json",
+    )
+
+    assert response.status_code == 200, response.data
+    assert settings.JWT_ACCESS_COOKIE_NAME in response.cookies
+    user = User.objects.get(email="new.student@example.com")
+    assert user.email_verified is True
+    assert response.data["user"]["email_verified"] is True
+
+
+def test_verify_email_rejects_wrong_code(api):
+    api.post(REGISTER_URL, VALID_PAYLOAD, format="json")
+    response = api.post(
+        "/api/auth/verify-email/",
+        {"email": VALID_PAYLOAD["email"], "code": "000000"},
+        format="json",
+    )
+    assert response.status_code == 400
+    assert User.objects.get(email="new.student@example.com").email_verified is False
+
+
+def test_unverified_user_cannot_log_in(api):
+    api.post(REGISTER_URL, VALID_PAYLOAD, format="json")
+    response = api.post(
+        LOGIN_URL,
+        {"email": VALID_PAYLOAD["email"], "password": VALID_PAYLOAD["password"]},
+        format="json",
+    )
+    assert response.status_code == 403
+    assert response.data["code"] == "email_not_verified"
+
+
+def test_resend_verification_sends_a_new_code(api, settings):
+    from django.core import mail
+
+    settings.EMAIL_VERIFICATION_RESEND_SECONDS = 0
+    api.post(REGISTER_URL, VALID_PAYLOAD, format="json")
+    first_code = _code_from_latest_email()
+
+    response = api.post(
+        "/api/auth/resend-verification/", {"email": VALID_PAYLOAD["email"]}, format="json"
+    )
+
+    assert response.status_code == 200
+    assert len(mail.outbox) == 2
+    assert _code_from_latest_email() != first_code

@@ -96,28 +96,40 @@ Use `?page=` and `?page_size=` (max 100). `/api/categories/` and
 }
 ```
 
-`201 Created`, sets both cookies, and creates the user's single preference row:
+`201 Created` — the account is created unverified and **does not** set auth
+cookies yet. A 6-digit code is emailed to the address. The frontend should
+send the user to the verify-email screen:
 
 ```json
 {
-  "user": {
-    "id": "0f6c...",
-    "email": "amina@example.com",
-    "name": "Amina Wanjiru",
-    "role": "student",
-    "avatar_url": null,
-    "institution": null,
-    "is_active": true,
-    "is_staff": false,
-    "created_at": "2026-08-24T10:00:00Z",
-    "updated_at": "2026-08-24T10:00:00Z"
-  },
-  "csrf_token": "…",
-  "detail": "Account created successfully."
+  "detail": "Account created. Enter the verification code we sent to your email.",
+  "email": "amina@example.com",
+  "email_verified": false
 }
 ```
 
 Emails are lowercased before storage, so logins are case-insensitive.
+
+### `POST /api/auth/verify-email/` — public
+
+```json
+{ "email": "amina@example.com", "code": "482913" }
+```
+
+`200 OK` with the same body shape as login (user + `csrf_token`) and sets both
+cookies. `400` if the code is wrong, expired, or too many attempts have been
+made (`code: invalid_verification_code` / `expired_verification_code` /
+`too_many_verification_attempts`).
+
+### `POST /api/auth/resend-verification/` — public
+
+```json
+{ "email": "amina@example.com" }
+```
+
+Always `200` with a generic message so callers cannot probe whether an email
+is registered. A new code is only actually sent when the account exists and
+is still unverified. `400` if a code was requested less than 60 seconds ago.
 
 ### `POST /api/auth/login/` — public
 
@@ -125,9 +137,10 @@ Emails are lowercased before storage, so logins are case-insensitive.
 { "email": "amina@example.com", "password": "StrongPass!2026" }
 ```
 
-`200 OK` with the same body shape as register. `401` for bad credentials
-(`code: invalid_credentials`) and for suspended accounts
-(`code: account_suspended`).
+`200 OK` with the user object (including `email_verified`) and both cookies.
+`401` for bad credentials (`code: invalid_credentials`) and for suspended
+accounts (`code: account_suspended`). `403` with `code: email_not_verified`
+if the password is correct but the address has not been confirmed yet.
 
 ### `POST /api/auth/token/refresh/` — public
 
@@ -382,7 +395,9 @@ the cover image is removed from storage after the transaction commits.
 ### `POST /api/events/{id}/verify/` — admin
 
 Optional body `{ "verified": false }`. Sets `verified_by`/`verified_at` and
-logs `verified_event`.
+logs `verified_event`. The first time an event is verified, students whose
+saved categories (and optional school level) overlap the event — and who have
+`email_notifications` on — receive a match email.
 
 ### `GET /api/events/{id}/registrations/` — owning staff or admin
 
@@ -426,7 +441,8 @@ or `{ "event_slug": "county-chess-championship" }`.
 
 `201` on a new registration, `200` if a previously cancelled registration was
 reactivated, `409` if you are already registered, `400` if the event is
-unverified or has already ended. The event row is locked for the duration of
+unverified or has already ended. A confirmation email is sent after a
+successful register or reactivation. The event row is locked for the duration of
 the transaction, and the unique `(user, event)` constraint is the final guard
 against races.
 

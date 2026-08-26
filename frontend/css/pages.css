@@ -184,9 +184,11 @@ section.page-section {
   color: var(--color-text-muted);
   font-size: 64px;
   margin-bottom: var(--space-6);
+  position: relative;
 }
 
-.event-hero img {
+.event-hero img,
+.event-hero .cover-fallback {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -493,6 +495,20 @@ section.page-section {
   width: 88px;
   height: 88px;
   font-size: 28px;
+}
+
+.cover-preview {
+  margin-top: 12px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  height: 180px;
+  background: linear-gradient(135deg, rgba(26, 31, 61, 0.95), rgba(201, 162, 39, 0.85));
+}
+
+.cover-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 @media (max-width: 900px) {

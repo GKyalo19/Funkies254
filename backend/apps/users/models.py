@@ -37,6 +37,13 @@ class User(AbstractBaseUser, PermissionsMixin, UUIDPrimaryKeyModel):
     is_active = models.BooleanField(
         default=True, help_text="Inactive accounts cannot authenticate."
     )
+    email_verified = models.BooleanField(
+        default=False,
+        help_text="Self-registered accounts must confirm a code emailed to them.",
+    )
+    email_verification_code_hash = models.CharField(max_length=64, blank=True, default="")
+    email_verification_sent_at = models.DateTimeField(null=True, blank=True)
+    email_verification_attempts = models.PositiveSmallIntegerField(default=0)
     is_staff = models.BooleanField(
         default=False, help_text="Grants access to the Django admin site."
     )

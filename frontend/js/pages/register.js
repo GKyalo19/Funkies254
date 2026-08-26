@@ -1,5 +1,4 @@
 import { api, ApiError } from "../utils/api.js";
-import { clearCurrentUserCache } from "../utils/auth.js";
 import { applyFieldErrors, escapeHtml, formToObject, qs } from "../utils/dom.js";
 import { toast } from "../utils/toast.js";
 
@@ -29,9 +28,9 @@ form.addEventListener("submit", async (event) => {
 
   try {
     await api.post("/auth/register/", payload);
-    clearCurrentUserCache();
-    toast.success("Account created! Let's set your preferences.");
-    window.location.href = "/pages/preferences.html";
+    toast.success("Account created. Check your email for a verification code.");
+    const email = encodeURIComponent(payload.email || "");
+    window.location.href = `/pages/verify-email.html?email=${email}`;
   } catch (err) {
     if (err instanceof ApiError) {
       applyFieldErrors(form, err.fields);

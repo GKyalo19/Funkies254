@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; color: #1a1300; background: #f7f3ea; padding: 24px;">
+  <div style="max-width: 520px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 32px;">
+    <h1 style="margin: 0 0 16px; font-size: 22px;">Verify your email</h1>
+    <p>Hi {{ user.get_short_name }},</p>
+    <p>Use this code to finish setting up your Funkies254 account:</p>
+    <p style="font-size: 32px; letter-spacing: 8px; font-weight: 700; text-align: center; margin: 24px 0;">{{ code }}</p>
+    <p style="color: #6b6b6b; font-size: 14px;">The code expires in {{ ttl_minutes }} minutes. If you did not create an account, you can ignore this email.</p>
+    <p style="margin-top: 32px;">— Funkies254</p>
+  </div>
+</body>
+</html>

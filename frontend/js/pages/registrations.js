@@ -4,6 +4,7 @@ import { renderHeader } from "../components/header.js";
 import { api } from "../utils/api.js";
 import { requireAuth } from "../utils/auth.js";
 import { escapeHtml, formatDate, qs } from "../utils/dom.js";
+import { coverInnerHtml } from "../utils/media.js";
 import { toast } from "../utils/toast.js";
 
 function createRegistrationCard(registration) {
@@ -12,7 +13,7 @@ function createRegistrationCard(registration) {
   card.className = "registration-item";
   card.innerHTML = `
     <div class="cover">
-      <img src="${escapeHtml(event.cover_image_url || "/assets/images/event-cover-default.jpg")}" alt="${escapeHtml(event.title)}" loading="lazy" />
+      ${coverInnerHtml(event.cover_image_url, event.title)}
     </div>
     <div class="body">
       <h3>${escapeHtml(event.title)}</h3>

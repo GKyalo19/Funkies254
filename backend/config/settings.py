@@ -279,16 +279,33 @@ LOGGING = {
     },
 }
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# --------------------------------------------------------------------------- #
+# Email (Mailtrap SMTP in deployed environments; console if no host is set)
+# --------------------------------------------------------------------------- #
 
 EMAIL_HOST = config("EMAIL_HOST", default="")
 EMAIL_PORT = config("EMAIL_PORT", cast=int, default=2525)
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
-
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool, default=True)
-
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND",
+    default=(
+        "django.core.mail.backends.smtp.EmailBackend"
+        if EMAIL_HOST
+        else "django.core.mail.backends.console.EmailBackend"
+    ),
+)
 DEFAULT_FROM_EMAIL = config(
     "DEFAULT_FROM_EMAIL",
     default="Funkies254 <no-reply@funkies254.com>",
+)
+EMAIL_VERIFICATION_CODE_TTL_MINUTES = config(
+    "EMAIL_VERIFICATION_CODE_TTL_MINUTES", default=15, cast=int
+)
+EMAIL_VERIFICATION_RESEND_SECONDS = config(
+    "EMAIL_VERIFICATION_RESEND_SECONDS", default=60, cast=int
+)
+EMAIL_VERIFICATION_MAX_ATTEMPTS = config(
+    "EMAIL_VERIFICATION_MAX_ATTEMPTS", default=5, cast=int
 )

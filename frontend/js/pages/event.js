@@ -4,6 +4,7 @@ import { renderHeader } from "../components/header.js";
 import { api, ApiError } from "../utils/api.js";
 import { getCurrentUser, initials, isStudent } from "../utils/auth.js";
 import { escapeHtml, formatDate, formatTimeRange, getQueryParam, qs } from "../utils/dom.js";
+import { avatarInnerHtml, coverInnerHtml } from "../utils/media.js";
 import { toast } from "../utils/toast.js";
 
 const slug = getQueryParam("slug");
@@ -16,7 +17,7 @@ function institutionRowHtml(institution) {
   return `
     <div class="organizer-row">
       <div class="avatar">
-        ${institution.logo_url ? `<img src="${escapeHtml(institution.logo_url)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : initials({ name: institution.name })}
+        ${avatarInnerHtml(institution.logo_url) || initials({ name: institution.name })}
       </div>
       <div class="info">
         <h4>by ${escapeHtml(institution.name)}</h4>
@@ -119,7 +120,7 @@ function renderEvent(event) {
 
   content.innerHTML = `
     <div class="event-hero">
-      <img src="${escapeHtml(event.cover_image_url || "/assets/images/event-cover-default.jpg")}" alt="${escapeHtml(event.title)}" />
+      ${coverInnerHtml(event.cover_image_url, event.title)}
     </div>
 
     ${institutionRowHtml(event.institution)}
@@ -187,7 +188,7 @@ async function handleRegister(event) {
       toast.success("Registration cancelled.");
     } else {
       await api.post("/registrations/", { event_id: event.id });
-      toast.success("You're registered! 🎉");
+      toast.success("You're registered! Check your email for confirmation.");
     }
     await loadEvent();
   } catch (err) {

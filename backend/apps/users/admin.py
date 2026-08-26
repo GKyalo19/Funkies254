@@ -25,8 +25,8 @@ class UserAdmin(DjangoUserAdmin):
     form = UserEditForm
     model = User
 
-    list_display = ("email", "name", "role", "institution", "is_active", "created_at")
-    list_filter = ("role", "is_active", "is_staff", "institution")
+    list_display = ("email", "name", "role", "institution", "email_verified", "is_active", "created_at")
+    list_filter = ("role", "is_active", "email_verified", "is_staff", "institution")
     search_fields = ("email", "name")
     ordering = ("-created_at",)
     readonly_fields = ("id", "created_at", "updated_at", "last_login")
@@ -35,7 +35,19 @@ class UserAdmin(DjangoUserAdmin):
     fieldsets = (
         (None, {"fields": ("id", "email", "password")}),
         ("Profile", {"fields": ("name", "avatar_url", "role", "institution")}),
-        ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
+        (
+            "Permissions",
+            {
+                "fields": (
+                    "is_active",
+                    "email_verified",
+                    "is_staff",
+                    "is_superuser",
+                    "groups",
+                    "user_permissions",
+                )
+            },
+        ),
         ("Timestamps", {"fields": ("last_login", "created_at", "updated_at")}),
     )
     add_fieldsets = (
@@ -47,3 +59,8 @@ class UserAdmin(DjangoUserAdmin):
             },
         ),
     )
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.email_verified = True
+        super().save_model(request, obj, form, change)

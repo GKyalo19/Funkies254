@@ -35,6 +35,7 @@ class UserManager(BaseUserManager):
         extra_fields["is_active"] = True
         extra_fields["is_staff"] = True
         extra_fields["is_superuser"] = True
+        extra_fields.setdefault("email_verified", True)
         return self._create_user(email, password, **extra_fields)
 
     def get_by_natural_key(self, username):

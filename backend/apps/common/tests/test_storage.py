@@ -33,7 +33,9 @@ class FakeResponse:
 
 
 def test_valid_image_passes_validation(storage_settings):
-    supabase_storage.validate_image(png())
+    supabase_storage.validate_image(
+        SimpleUploadedFile("cover.png", _one_pixel_png(), content_type="image/png")
+    )
 
 
 def test_unsupported_content_type_is_rejected(storage_settings):
@@ -127,9 +129,12 @@ def test_avatar_upload_helper_uses_avatars_bucket(storage_settings, monkeypatch)
         lambda url, **kwargs: urls.append(url) or FakeResponse(200),
     )
 
-    result = supabase_storage.upload_avatar(png(), "user-1")
+    result = supabase_storage.upload_avatar(
+        SimpleUploadedFile("avatar.png", _one_pixel_png(), content_type="image/png"),
+        "user-1",
+    )
 
-    assert "/object/avatars/users/user-1/" in urls[0]
+    assert "/object/avatars/avatars/user-1/" in urls[0]
     assert "/object/public/avatars/" in result
 
 

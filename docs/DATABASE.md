@@ -52,6 +52,10 @@ media columns hold Supabase Storage URLs rather than binary data.
 | `institution_id` | UUID FK → `institutions` | Yes | `ON DELETE SET NULL` |
 | `is_active` | boolean | No | Suspension state |
 | `is_staff` | boolean | No | Django admin access |
+| `email_verified` | boolean | No | Default `false` for self-registered accounts |
+| `email_verification_code_hash` | varchar(64) | No | SHA-256 of the current 6-digit code; blank once verified |
+| `email_verification_sent_at` | timestamptz | Yes | Last time a code was emailed |
+| `email_verification_attempts` | smallint | No | Failed verify attempts for the current code |
 | `is_superuser` | boolean | No | Django full permissions |
 | `last_login` | timestamptz | Yes | From `AbstractBaseUser` |
 | `created_at` / `updated_at` | timestamptz | No | `auto_now_add` / `auto_now` |

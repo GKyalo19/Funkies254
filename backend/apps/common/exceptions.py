@@ -53,6 +53,14 @@ class BusinessRuleError(APIException):
     default_code = "business_rule_violation"
 
 
+class EmailNotVerifiedError(APIException):
+    """Credentials were valid but the account has not confirmed its email."""
+
+    status_code = status.HTTP_403_FORBIDDEN
+    default_detail = "Please verify your email before logging in. Check your inbox for a code."
+    default_code = "email_not_verified"
+
+
 class StorageError(APIException):
     status_code = status.HTTP_502_BAD_GATEWAY
     default_detail = "Media storage is unavailable. Please try again."

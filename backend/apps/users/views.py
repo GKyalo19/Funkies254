@@ -14,13 +14,20 @@ from apps.common.permissions import IsAdmin
 from apps.users import tokens as token_service
 from apps.users.models import User
 from apps.users.serializers import (
+    EmailVerificationSerializer,
     LoginSerializer,
     RegisterSerializer,
+    ResendVerificationSerializer,
     RoleChangeSerializer,
     UserAdminSerializer,
     UserSerializer,
 )
-from apps.users.services import change_user_role, set_user_active
+from apps.users.services import (
+    change_user_role,
+    issue_and_send_verification_code,
+    set_user_active,
+    verify_email_code,
+)
 
 
 def _authenticated_response(request, user, *, status_code=status.HTTP_200_OK, detail=None):
@@ -56,11 +63,46 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        return Response(
+            {
+                "detail": "Account created. Enter the verification code we sent to your email.",
+                "email": user.email,
+                "email_verified": False,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class VerifyEmailView(APIView):
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+
+    def post(self, request):
+        serializer = EmailVerificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = verify_email_code(
+            email=serializer.validated_data["email"],
+            code=serializer.validated_data["code"],
+        )
         return _authenticated_response(
-            request,
-            user,
-            status_code=status.HTTP_201_CREATED,
-            detail="Account created successfully.",
+            request, user, detail="Email verified. You're signed in."
+        )
+
+
+class ResendVerificationView(APIView):
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+
+    def post(self, request):
+        serializer = ResendVerificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = User.objects.filter(email=serializer.validated_data["email"]).first()
+        if user is not None and not user.email_verified:
+            issue_and_send_verification_code(user)
+        return Response(
+            {
+                "detail": "If that email is registered and still unverified, a new code is on its way."
+            }
         )
 
 

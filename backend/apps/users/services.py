@@ -5,26 +5,115 @@ Multi-step workflows live here so views stay thin and every write that must be
 all-or-nothing runs inside one transaction.
 """
 
+import hashlib
+import hmac
+import secrets
+from datetime import timedelta
+
+from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 
 from apps.common.audit import log_action
 from apps.common.enums import ADMIN_ROLES, AuditAction, UserRole
+from apps.common.exceptions import BusinessRuleError
+from apps.common.mail import send_verification_code_email
 from apps.users.models import User
 
 
-@transaction.atomic
+def _hash_verification_code(user_id, code: str) -> str:
+    material = f"{settings.SECRET_KEY}:{user_id}:{code}".encode()
+    return hashlib.sha256(material).hexdigest()
+
+
+def issue_and_send_verification_code(user: User, *, force: bool = False) -> None:
+    """Create a 6-digit code, store only its hash, and email the plaintext."""
+    if user.email_verified:
+        raise BusinessRuleError("This email is already verified.")
+
+    now = timezone.now()
+    wait = timedelta(seconds=settings.EMAIL_VERIFICATION_RESEND_SECONDS)
+    if (
+        not force
+        and user.email_verification_sent_at
+        and now - user.email_verification_sent_at < wait
+    ):
+        raise BusinessRuleError("Please wait a minute before requesting another code.")
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    user.email_verification_code_hash = _hash_verification_code(user.id, code)
+    user.email_verification_sent_at = now
+    user.email_verification_attempts = 0
+    user.save(
+        update_fields=[
+            "email_verification_code_hash",
+            "email_verification_sent_at",
+            "email_verification_attempts",
+            "updated_at",
+        ]
+    )
+    send_verification_code_email(user, code)
+
+
+def verify_email_code(*, email: str, code: str) -> User:
+    """Mark the account verified when the submitted code matches and is still live."""
+    normalized = User.objects.normalize_login_email(email)
+    user = User.objects.filter(email=normalized).first()
+    if user is None:
+        raise BusinessRuleError("Invalid verification code.", code="invalid_verification_code")
+    if user.email_verified:
+        return user
+    if not user.email_verification_code_hash or not user.email_verification_sent_at:
+        raise BusinessRuleError("Request a new verification code.", code="no_verification_code")
+
+    ttl = timedelta(minutes=settings.EMAIL_VERIFICATION_CODE_TTL_MINUTES)
+    if timezone.now() > user.email_verification_sent_at + ttl:
+        raise BusinessRuleError(
+            "That code has expired. Request a new one.", code="expired_verification_code"
+        )
+
+    if user.email_verification_attempts >= settings.EMAIL_VERIFICATION_MAX_ATTEMPTS:
+        raise BusinessRuleError(
+            "Too many attempts. Request a new code.", code="too_many_verification_attempts"
+        )
+
+    user.email_verification_attempts += 1
+    user.save(update_fields=["email_verification_attempts", "updated_at"])
+
+    expected = _hash_verification_code(user.id, code)
+    if not hmac.compare_digest(user.email_verification_code_hash, expected):
+        raise BusinessRuleError("Invalid verification code.", code="invalid_verification_code")
+
+    user.email_verified = True
+    user.email_verification_code_hash = ""
+    user.email_verification_attempts = 0
+    user.save(
+        update_fields=[
+            "email_verified",
+            "email_verification_code_hash",
+            "email_verification_attempts",
+            "updated_at",
+        ]
+    )
+    return user
+
+
 def register_user(*, email, name, password, institution_id=None, role=UserRole.STUDENT):
     """Create an account together with its single preference record (§8.1)."""
     from apps.preferences.models import UserPreference
 
-    user = User.objects.create_user(
-        email=email,
-        password=password,
-        name=name,
-        role=role,
-        institution_id=institution_id,
-    )
-    UserPreference.objects.create(user=user)
+    with transaction.atomic():
+        user = User.objects.create_user(
+            email=email,
+            password=password,
+            name=name,
+            role=role,
+            institution_id=institution_id,
+            email_verified=False,
+        )
+        UserPreference.objects.create(user=user)
+
+    issue_and_send_verification_code(user, force=True)
     return user
 
 

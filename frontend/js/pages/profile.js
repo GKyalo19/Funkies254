@@ -3,6 +3,7 @@ import { renderHeader } from "../components/header.js";
 import { api, ApiError } from "../utils/api.js";
 import { clearCurrentUserCache, initials, requireAuth } from "../utils/auth.js";
 import { applyFieldErrors, qs } from "../utils/dom.js";
+import { avatarInnerHtml } from "../utils/media.js";
 import { toast } from "../utils/toast.js";
 
 const ROLE_LABELS = {
@@ -22,9 +23,7 @@ function fillForm(user) {
   qs("#institution").value = user.institution?.name || "Not linked to an institution";
 
   const avatarMount = qs("#sidebar-avatar");
-  avatarMount.innerHTML = user.avatar_url
-    ? `<img src="${user.avatar_url}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
-    : initials(user);
+  avatarMount.innerHTML = avatarInnerHtml(user.avatar_url) || initials(user);
 }
 
 async function handleSave(event) {
@@ -56,6 +55,9 @@ async function handleSave(event) {
 async function handleAvatarUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
+
+  const previewUrl = URL.createObjectURL(file);
+  qs("#sidebar-avatar").innerHTML = `<img src="${previewUrl}" alt="">`;
 
   const formData = new FormData();
   formData.append("avatar", file);

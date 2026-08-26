@@ -102,8 +102,7 @@
                 "exec": [
                   "pm.test('201 created', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
-                  "pm.test('role is student', () => pm.expect(body.user.role).to.eql('student'));",
-                  "pm.collectionVariables.set('csrf_token', body.csrf_token);"
+                  "pm.test('unverified until the code is entered', () => pm.expect(body.email_verified).to.eql(false));"
                 ]
               }
             }
@@ -116,6 +115,30 @@
               "raw": "{\n  \"email\": \"postman.student@example.com\",\n  \"name\": \"Postman Student\",\n  \"password\": \"StrongPass!2026\",\n  \"password_confirm\": \"StrongPass!2026\"\n}"
             },
             "url": { "raw": "{{base_url}}/api/auth/register/", "host": ["{{base_url}}"], "path": ["api", "auth", "register", ""] }
+          }
+        },
+        {
+          "name": "Verify email",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"postman.student@example.com\",\n  \"code\": \"123456\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/verify-email/", "host": ["{{base_url}}"], "path": ["api", "auth", "verify-email", ""] }
+          }
+        },
+        {
+          "name": "Resend verification code",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"postman.student@example.com\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/resend-verification/", "host": ["{{base_url}}"], "path": ["api", "auth", "resend-verification", ""] }
           }
         },
         {

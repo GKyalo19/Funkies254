@@ -64,6 +64,22 @@ function wireVirtualToggle() {
   sync();
 }
 
+function wireCoverPreview() {
+  const input = qs("#cover_image");
+  const preview = qs("#cover-preview");
+  const img = qs("#cover-preview-img");
+  input.addEventListener("change", () => {
+    const file = input.files[0];
+    if (!file) {
+      preview.hidden = true;
+      img.removeAttribute("src");
+      return;
+    }
+    img.src = URL.createObjectURL(file);
+    preview.hidden = false;
+  });
+}
+
 function buildFormData(form) {
   const isVirtual = qs("#is_virtual").checked;
   const data = new FormData();
@@ -144,6 +160,7 @@ async function init() {
 
   qs("#event-form-page").hidden = false;
   wireVirtualToggle();
+  wireCoverPreview();
   qs("#event-form").addEventListener("submit", handleSubmit);
 }
 

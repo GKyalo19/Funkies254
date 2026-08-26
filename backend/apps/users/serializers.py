@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from apps.common import supabase_storage
-from apps.common.exceptions import AuthenticationError
+from apps.common.exceptions import AuthenticationError, EmailNotVerifiedError
 from apps.common.enums import ADMIN_ROLES, UserRole
 from apps.users.managers import UserManager
 from apps.users.models import User
@@ -47,6 +47,7 @@ class UserSerializer(serializers.ModelSerializer):
             "institution_id",
             "is_active",
             "is_staff",
+            "email_verified",
             "created_at",
             "updated_at",
         )
@@ -57,6 +58,7 @@ class UserSerializer(serializers.ModelSerializer):
             "avatar_url",
             "is_active",
             "is_staff",
+            "email_verified",
             "created_at",
             "updated_at",
         )
@@ -100,7 +102,7 @@ class UserSerializer(serializers.ModelSerializer):
 
         if avatar is not None:
             supabase_storage.validate_image(avatar)
-            path = supabase_storage.build_object_path("users", avatar, instance.id)
+            path = supabase_storage.build_object_path("avatars", avatar, instance.id)
             instance.avatar_url = supabase_storage.replace(
                 supabase_storage.AVATARS, instance.avatar_url, path, avatar
             )
@@ -178,6 +180,9 @@ class LoginSerializer(serializers.Serializer):
                 )
             raise AuthenticationError("Invalid email or password.", code="invalid_credentials")
 
+        if not user.email_verified:
+            raise EmailNotVerifiedError()
+
         attrs["user"] = user
         return attrs
 
@@ -198,12 +203,34 @@ class UserAdminSerializer(serializers.ModelSerializer):
             "institution_name",
             "is_active",
             "is_staff",
+            "email_verified",
             "created_at",
         )
         read_only_fields = fields
 
     def get_institution_name(self, obj):
         return obj.institution.name if obj.institution_id else None
+
+
+class EmailVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.CharField(min_length=6, max_length=6)
+
+    def validate_email(self, value):
+        return UserManager.normalize_login_email(value)
+
+    def validate_code(self, value):
+        code = (value or "").strip()
+        if not code.isdigit() or len(code) != 6:
+            raise serializers.ValidationError("Enter the 6-digit code from your email.")
+        return code
+
+
+class ResendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return UserManager.normalize_login_email(value)
 
 
 class RoleChangeSerializer(serializers.Serializer):

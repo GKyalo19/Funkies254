@@ -12,11 +12,11 @@ from django.utils import timezone
 from apps.common.db import for_update
 from apps.common.enums import RegistrationStatus
 from apps.common.exceptions import BusinessRuleError, ConflictError
+from apps.common.mail import send_registration_confirmation_email
 from apps.events.models import Event
 from apps.registrations.models import EventRegistration
 
 
-@transaction.atomic
 def register_for_event(*, user, event_id=None, event=None) -> tuple:
     """
     Register ``user`` for an event.
@@ -25,27 +25,31 @@ def register_for_event(*, user, event_id=None, event=None) -> tuple:
     reactivated rather than duplicated, because the database enforces one row
     per (user, event).
     """
-    locked = for_update(Event.objects.filter(pk=event_id or event.pk))
-    event = locked.first()
-    if event is None:
-        raise BusinessRuleError("Event does not exist.")
+    with transaction.atomic():
+        locked = for_update(Event.objects.filter(pk=event_id or event.pk))
+        event = locked.first()
+        if event is None:
+            raise BusinessRuleError("Event does not exist.")
 
-    _assert_open_for_registration(event)
+        _assert_open_for_registration(event)
 
-    registration = EventRegistration.objects.filter(user=user, event=event).first()
-    if registration is not None:
-        if registration.status == RegistrationStatus.REGISTERED:
-            raise ConflictError("You are already registered for this event.")
-        registration.status = RegistrationStatus.REGISTERED
-        registration.save(update_fields=["status"])
-        return registration, False
+        registration = EventRegistration.objects.filter(user=user, event=event).first()
+        if registration is not None:
+            if registration.status == RegistrationStatus.REGISTERED:
+                raise ConflictError("You are already registered for this event.")
+            registration.status = RegistrationStatus.REGISTERED
+            registration.save(update_fields=["status"])
+            created = False
+        else:
+            # Capacity hook: when Event gains a capacity field, count active
+            # registrations here — the event row is already locked.
+            registration = EventRegistration.objects.create(
+                user=user, event=event, status=RegistrationStatus.REGISTERED
+            )
+            created = True
 
-    # Capacity hook: when Event gains a capacity field, count active
-    # registrations here — the event row is already locked.
-    registration = EventRegistration.objects.create(
-        user=user, event=event, status=RegistrationStatus.REGISTERED
-    )
-    return registration, True
+    send_registration_confirmation_email(user, event)
+    return registration, created
 
 
 @transaction.atomic
