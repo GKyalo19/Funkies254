@@ -76,7 +76,7 @@ def test_activity_log_visibility_boundary(api, request, fixture_name, expected, 
     [
         ("student", 403),  # not an administrator at all
         ("staff", 403),
-        ("admin_user", 400),  # may reach the endpoint, may not grant admin
+        ("admin_user", 403),  # role changes are super-admin only
         ("super_admin", 200),
     ],
 )

@@ -78,12 +78,13 @@ Two layers, both required:
 Related hardening:
 
 - `PATCH /api/users/me/` refuses to change `institution_id` for non-students,
-  because staff ownership is derived from that field. Only an admin can move a
-  staff account between institutions.
+  because staff ownership is derived from that field. Only a super administrator
+  may move a staff account between institutions (`PATCH /api/users/{id}/`).
 - Registration cannot self-assign an elevated role; a `role` field in the
-  payload is ignored.
-- Granting or removing `admin`/`super_admin` requires `super_admin`, and admins
-  cannot suspend other administrators or themselves.
+  payload is ignored. Signup stores free-text `institution_affiliation` only.
+- Changing any account's role (`POST /api/users/{id}/role/`) requires
+  `super_admin`. Promoting to `institution_staff` must also link an Institution.
+- Admins cannot suspend other administrators or themselves.
 - Unverified events are invisible to students and anonymous visitors, so
   "save"/"register" on a draft returns 404 rather than leaking its existence.
 

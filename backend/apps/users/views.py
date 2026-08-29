@@ -10,9 +10,10 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.common.enums import ADMIN_ROLES
-from apps.common.permissions import IsAdmin
+from apps.common.permissions import IsAdmin, IsSuperAdmin
 from apps.users import tokens as token_service
 from apps.users.models import User
+from apps.users.filters import UserFilter
 from apps.users.serializers import (
     EmailVerificationSerializer,
     LoginSerializer,
@@ -20,6 +21,7 @@ from apps.users.serializers import (
     ResendVerificationSerializer,
     RoleChangeSerializer,
     UserAdminSerializer,
+    UserAdminUpdateSerializer,
     UserSerializer,
 )
 from apps.users.services import (
@@ -187,10 +189,35 @@ class UserListView(generics.ListAPIView):
     serializer_class = UserAdminSerializer
     permission_classes = (IsAdmin,)
     queryset = User.objects.select_related("institution").all()
-    filterset_fields = ("role", "is_active", "institution")
-    search_fields = ("email", "name")
+    filterset_class = UserFilter
+    search_fields = ("email", "name", "institution_affiliation")
     ordering_fields = ("created_at", "email", "name", "role")
     ordering = ("-created_at",)
+
+
+class UserAdminDetailView(generics.RetrieveUpdateAPIView):
+    """GET any account (admin); PATCH name/affiliation/staff institution (super admin)."""
+
+    queryset = User.objects.select_related("institution").all()
+    http_method_names = ("get", "patch", "head", "options")
+
+    def get_permissions(self):
+        if self.request.method == "PATCH":
+            return [IsSuperAdmin()]
+        return [IsAdmin()]
+
+    def get_serializer_class(self):
+        if self.request.method == "PATCH":
+            return UserAdminUpdateSerializer
+        return UserAdminSerializer
+
+    def update(self, request, *args, **kwargs):
+        user = self.get_object()
+        serializer = UserAdminUpdateSerializer(user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        user.refresh_from_db()
+        return Response(UserAdminSerializer(user).data)
 
 
 class UserSuspendView(APIView):
@@ -225,9 +252,9 @@ class UserReinstateView(APIView):
 
 
 class UserRoleView(APIView):
-    """Change an account's application role (§13 promoted_user)."""
+    """Change an account's application role. Super admin only."""
 
-    permission_classes = (IsAdmin,)
+    permission_classes = (IsSuperAdmin,)
 
     def post(self, request, pk):
         from rest_framework.exceptions import PermissionDenied
@@ -236,12 +263,14 @@ class UserRoleView(APIView):
         serializer = RoleChangeSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
 
-        if user.role in ADMIN_ROLES and not request.user.is_super_admin:
-            raise PermissionDenied(
-                "Only a super administrator may change an administrator's role."
-            )
         if user.id == request.user.id:
             raise PermissionDenied("You cannot change your own role.")
 
-        change_user_role(actor=request.user, user=user, role=serializer.validated_data["role"])
+        change_user_role(
+            actor=request.user,
+            user=user,
+            role=serializer.validated_data["role"],
+            institution_id=serializer.validated_data.get("institution_id"),
+        )
+        user.refresh_from_db()
         return Response(UserAdminSerializer(user).data)

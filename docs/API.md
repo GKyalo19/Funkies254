@@ -22,7 +22,9 @@ Authentication is a Django-issued JWT pair carried in **httpOnly cookies**:
 
 - Tokens are **never** returned in a response body, so frontend JavaScript
   cannot read them.
-- `POST /api/auth/login/` and `POST /api/auth/register/` set both cookies.
+- `POST /api/auth/login/` sets both cookies. `POST /api/auth/register/` creates
+  an unverified account and does **not** set cookies until the email code is
+  confirmed.
 - Postman stores and replays these cookies automatically — log in once and every
   later request in the collection is authenticated.
 - An `Authorization: Bearer <token>` header is also accepted, which is useful
@@ -36,13 +38,16 @@ Authentication is a Django-issued JWT pair carried in **httpOnly cookies**:
 
 | Role | Can |
 |---|---|
-| `student` | View events, save, register, edit own profile, manage own preferences |
-| `institution_staff` | Create events, edit own events, view registrations for own events, update own institution |
-| `admin` | View all users/institutions/events, verify institutions and events, suspend users, curate content |
-| `super_admin` | Everything, plus creating and removing admins |
+| `student` | View events, save, register, edit own profile and school affiliation, manage own preferences |
+| `institution_staff` | Create and edit own institution's events, view registrations for those events |
+| `admin` | List/search users, curate and verify events, suspend non-admin users |
+| `super_admin` | Everything an admin can do, plus changing roles, editing other accounts, and creating/removing admins |
 
-Registration always creates a `student`. Elevated roles are granted by an
-administrator through `POST /api/users/{id}/role/` or the Django admin.
+Registration always creates a `student`. Elevated roles are granted only by a
+`super_admin` through `POST /api/users/{id}/role/` or the Django admin. Promoting
+someone to `institution_staff` also links them to an `Institution` (explicit
+`institution_id`, an existing staff link, or `get_or_create` from their
+`institution_affiliation`).
 
 ---
 
@@ -92,7 +97,7 @@ Use `?page=` and `?page_size=` (max 100). `/api/categories/` and
   "name": "Amina Wanjiru",
   "password": "StrongPass!2026",
   "password_confirm": "StrongPass!2026",
-  "institution_id": "9f1c...  (optional)"
+  "institution_affiliation": "Alliance High School  (optional)"
 }
 ```
 
@@ -166,9 +171,10 @@ Returns the profile object shown above.
 
 ### `PATCH /api/users/me/` — authenticated
 
-Writable: `name`, `avatar` (file upload), and `institution_id` (students only —
-staff ownership is derived from that field, so only an admin may change it for
-non-students). `email`, `role`, `is_active` and `is_staff` are read-only here.
+Writable: `name`, `avatar` (file upload), `institution_affiliation`, and
+`institution_id` (students only — staff ownership is derived from that field,
+so only a super administrator may change it for non-students). `email`, `role`,
+`is_active` and `is_staff` are read-only here.
 
 ```bash
 curl -X PATCH http://127.0.0.1:8000/api/users/me/ \
@@ -177,8 +183,18 @@ curl -X PATCH http://127.0.0.1:8000/api/users/me/ \
 
 ### `GET /api/users/` — admin
 
-Filters: `?role=`, `?is_active=`, `?institution=`, `?search=` (email or name),
-`?ordering=created_at|email|name|role`.
+Filters: `?role=`, `?is_active=`, `?institution=`, `?affiliation=` (icontains on
+the free-text school name), `?created_after=`, `?created_before=`,
+`?search=` (email, name or affiliation), `?ordering=created_at|email|name|role`.
+
+### `GET /api/users/{id}/` — admin
+
+One account in the same shape as the list rows.
+
+### `PATCH /api/users/{id}/` — super admin
+
+Writable: `name`, `institution_affiliation`, `institution_id` (the staff scoping
+link). Role changes stay on `/role/`.
 
 ### `POST /api/users/{id}/suspend/` — admin
 
@@ -190,15 +206,19 @@ suspend themselves or another administrator (super admin only).
 
 Reverses a suspension and writes `reinstated_user`.
 
-### `POST /api/users/{id}/role/` — admin (super admin for admin roles)
+### `POST /api/users/{id}/role/` — super admin
 
 ```json
-{ "role": "institution_staff" }
+{ "role": "institution_staff", "institution_id": "optional-uuid" }
 ```
 
-Granting or removing `admin`/`super_admin` requires `super_admin`, and logs
+Regular admins receive `403`. Granting or removing `admin`/`super_admin` logs
 `created_admin` or `removed_admin`; other changes log `promoted_user`.
 `is_staff`/`is_superuser` are kept in step with the application role.
+
+Promoting to `institution_staff` requires an institution: send `institution_id`,
+or leave the account already linked, or have `institution_affiliation` filled
+in so the API can reuse/create that institution. Otherwise `400`.
 
 ---
 

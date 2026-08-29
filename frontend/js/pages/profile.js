@@ -20,7 +20,8 @@ function fillForm(user) {
   form.name.value = user.name || "";
   form.email.value = user.email || "";
   qs("#role").value = ROLE_LABELS[user.role] || user.role || "";
-  qs("#institution").value = user.institution?.name || "Not linked to an institution";
+  qs("#institution_affiliation").value = user.institution_affiliation || "";
+  qs("#institution").value = user.institution?.name || "Not linked (staff accounts only)";
 
   const avatarMount = qs("#sidebar-avatar");
   avatarMount.innerHTML = avatarInnerHtml(user.avatar_url) || initials(user);
@@ -34,8 +35,10 @@ async function handleSave(event) {
   saveBtn.textContent = "Saving...";
 
   try {
-    // `name` is the only self-editable field on /users/me/.
-    currentUser = await api.patch("/users/me/", { name: form.name.value.trim() });
+    currentUser = await api.patch("/users/me/", {
+      name: form.name.value.trim(),
+      institution_affiliation: form.institution_affiliation.value.trim() || null,
+    });
     clearCurrentUserCache();
     fillForm(currentUser);
     toast.success("Profile updated.");

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Events — Funkies254</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/pages.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <main class="container page-section">
+    <div class="listings-banner">
+      <h1 id="dashboard-heading">Events</h1>
+      <a class="btn btn-primary btn-sm" href="/pages/event-form.html">+ Add Event</a>
+    </div>
+    <p class="dashboard-intro" id="dashboard-intro"></p>
+    <div class="dashboard-toolbar" id="dashboard-filters" hidden>
+      <button type="button" class="filter-tag active" data-verified="">All</button>
+      <button type="button" class="filter-tag" data-verified="false">Unverified</button>
+      <button type="button" class="filter-tag" data-verified="true">Verified</button>
+    </div>
+    <div class="event-grid" id="events-grid"></div>
+  </main>
+
+  <div id="site-footer"></div>
+  <script type="module" src="/js/pages/events-dashboard.js"></script>
+</body>
+</html>

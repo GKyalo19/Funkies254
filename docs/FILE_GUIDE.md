@@ -179,7 +179,7 @@ frontend/
 ├── pages/                     One .html file per route — pure markup + mount points,
 │   │                          no inline logic (that lives in the matching js/pages/*.js)
 │   ├── login.html               Log in form
-│   ├── register.html             Sign-up form (institution, education level, password)
+│   ├── register.html             Sign-up form (name, school/org, email, password)
 │   ├── reset-password.html         Two-step "request link" / "set new password" form
 │   ├── event-listings.html          Full event grid + filter sidebar (category/location/
 │   │                                 education level/fee) + pagination
@@ -187,8 +187,10 @@ frontend/
 │   ├── profile.html                   Tabbed account page: "My Profile" tab (this file)
 │   ├── preferences.html                Tabbed account page: "Preferences" tab
 │   ├── registrations.html               Tabbed account page: "My Registrations" tab
-│   └── event-form.html                   Staff-only "Add Event" form (hits the same
-│                                            POST /api/events/ a future mobile app would use)
+│   ├── event-form.html                   Staff/admin add or edit event (`?slug=` for edit)
+│   ├── events-dashboard.html             Staff "my events" / admin all-events board
+│   ├── event-participants.html           Registrations for one event (`?slug=`)
+│   └── users.html                        Admin user list; super admin can change roles
 │
 ├── css/
 │   ├── base.css                Design tokens ONLY: CSS custom properties for colour
@@ -270,7 +272,10 @@ frontend/
 | `profile.html` | `profile.js` | `GET/PATCH /users/me/`, `POST /users/me/avatar/` |
 | `preferences.html` | `preferences.js` | `GET/PUT /preferences/me/` |
 | `registrations.html` | `registrations.js` | `GET /registrations/` |
-| `event-form.html` (staff only) | `event-form.js` | `POST /events/` |
+| `event-form.html` (staff/admin) | `event-form.js` | `POST /events/`, `GET/PATCH /events/{slug}/` |
+| `events-dashboard.html` | `events-dashboard.js` | `GET /events/?mine=true`, `POST /events/{slug}/verify/` |
+| `event-participants.html` | `event-participants.js` | `GET /events/{id}/registrations/` |
+| `users.html` | `users.js` | `GET /users/`, `PATCH /users/{id}/`, `POST /users/{id}/role/` |
 
 ---
 

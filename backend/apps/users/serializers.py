@@ -10,7 +10,7 @@ from rest_framework import serializers
 
 from apps.common import supabase_storage
 from apps.common.exceptions import AuthenticationError, EmailNotVerifiedError
-from apps.common.enums import ADMIN_ROLES, UserRole
+from apps.common.enums import UserRole
 from apps.users.managers import UserManager
 from apps.users.models import User
 from apps.users.services import register_user
@@ -21,7 +21,7 @@ class UserBriefSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "name", "email", "role", "avatar_url")
+        fields = ("id", "name", "email", "role", "avatar_url", "institution_affiliation")
         read_only_fields = fields
 
 
@@ -45,6 +45,7 @@ class UserSerializer(serializers.ModelSerializer):
             "avatar",
             "institution",
             "institution_id",
+            "institution_affiliation",
             "is_active",
             "is_staff",
             "email_verified",
@@ -90,6 +91,10 @@ class UserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Institution does not exist.")
         return value
 
+    def validate_institution_affiliation(self, value):
+        cleaned = (value or "").strip()
+        return cleaned or None
+
     def update(self, instance, validated_data):
         avatar = validated_data.pop("avatar", None)
         institution_id = validated_data.pop("institution_id", serializers.empty)
@@ -123,7 +128,9 @@ class RegisterSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150)
     password = serializers.CharField(write_only=True, min_length=8, trim_whitespace=False)
     password_confirm = serializers.CharField(write_only=True, trim_whitespace=False)
-    institution_id = serializers.UUIDField(required=False, allow_null=True)
+    institution_affiliation = serializers.CharField(
+        max_length=200, required=False, allow_blank=True, allow_null=True
+    )
 
     def validate_email(self, value):
         normalized = UserManager.normalize_login_email(value)
@@ -131,14 +138,9 @@ class RegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError("An account with this email already exists.")
         return normalized
 
-    def validate_institution_id(self, value):
-        if value is None:
-            return None
-        from apps.organizers.models import Institution
-
-        if not Institution.objects.filter(pk=value).exists():
-            raise serializers.ValidationError("Institution does not exist.")
-        return value
+    def validate_institution_affiliation(self, value):
+        cleaned = (value or "").strip()
+        return cleaned or None
 
     def validate(self, attrs):
         if attrs["password"] != attrs.pop("password_confirm"):
@@ -157,7 +159,7 @@ class RegisterSerializer(serializers.Serializer):
             email=validated_data["email"],
             name=validated_data["name"],
             password=validated_data["password"],
-            institution_id=validated_data.get("institution_id"),
+            institution_affiliation=validated_data.get("institution_affiliation"),
         )
 
 
@@ -190,6 +192,7 @@ class LoginSerializer(serializers.Serializer):
 class UserAdminSerializer(serializers.ModelSerializer):
     """Administrative read view over accounts (§14)."""
 
+    institution = serializers.SerializerMethodField()
     institution_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -201,6 +204,7 @@ class UserAdminSerializer(serializers.ModelSerializer):
             "role",
             "institution",
             "institution_name",
+            "institution_affiliation",
             "is_active",
             "is_staff",
             "email_verified",
@@ -208,8 +212,54 @@ class UserAdminSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    def get_institution(self, obj):
+        if not obj.institution_id:
+            return None
+        institution = obj.institution
+        return {
+            "id": str(institution.id),
+            "name": institution.name,
+            "slug": institution.slug,
+            "verified": institution.verified,
+        }
+
     def get_institution_name(self, obj):
-        return obj.institution.name if obj.institution_id else None
+        if obj.institution_id:
+            return obj.institution.name
+        return obj.institution_affiliation
+
+
+class UserAdminUpdateSerializer(serializers.Serializer):
+    """Super-admin edits to another account's profile (not role — that is /role/)."""
+
+    name = serializers.CharField(max_length=150, required=False)
+    institution_affiliation = serializers.CharField(
+        max_length=200, required=False, allow_blank=True, allow_null=True
+    )
+    institution_id = serializers.UUIDField(required=False, allow_null=True)
+
+    def validate_institution_affiliation(self, value):
+        cleaned = (value or "").strip()
+        return cleaned or None
+
+    def validate_institution_id(self, value):
+        if value is None:
+            return None
+        from apps.organizers.models import Institution
+
+        if not Institution.objects.filter(pk=value).exists():
+            raise serializers.ValidationError("Institution does not exist.")
+        return value
+
+    def update(self, instance, validated_data):
+        if "name" in validated_data:
+            instance.name = validated_data["name"]
+        if "institution_affiliation" in validated_data:
+            instance.institution_affiliation = validated_data["institution_affiliation"]
+        if "institution_id" in validated_data:
+            instance.institution_id = validated_data["institution_id"]
+        instance.save()
+        return instance
 
 
 class EmailVerificationSerializer(serializers.Serializer):
@@ -234,18 +284,16 @@ class ResendVerificationSerializer(serializers.Serializer):
 
 
 class RoleChangeSerializer(serializers.Serializer):
-    """Payload for promoting or demoting an account."""
+    """Payload for promoting or demoting an account. Super admin only."""
 
     role = serializers.ChoiceField(choices=UserRole.choices)
+    institution_id = serializers.UUIDField(required=False, allow_null=True)
 
-    def validate_role(self, value):
-        actor = self.context["request"].user
-        if value in ADMIN_ROLES and not actor.is_super_admin:
-            raise serializers.ValidationError(
-                "Only a super administrator may grant administrator roles."
-            )
-        if value == UserRole.SUPER_ADMIN and not actor.is_super_admin:
-            raise serializers.ValidationError(
-                "Only a super administrator may grant the super administrator role."
-            )
+    def validate_institution_id(self, value):
+        if value is None:
+            return None
+        from apps.organizers.models import Institution
+
+        if not Institution.objects.filter(pk=value).exists():
+            raise serializers.ValidationError("Institution does not exist.")
         return value

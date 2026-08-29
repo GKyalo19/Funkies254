@@ -7,7 +7,7 @@
  * hamburger trigger on the right that opens a dropdown with either the
  * auth links (logged out) or the account menu (logged in).
  */
-import { canManageEvents, displayName, getCurrentUser, initials, logout } from "../utils/auth.js";
+import { canManageEvents, displayName, getCurrentUser, initials, isAdmin, isInstitutionStaff, logout } from "../utils/auth.js";
 import { escapeHtml, qs } from "../utils/dom.js";
 import { avatarInnerHtml } from "../utils/media.js";
 
@@ -20,12 +20,20 @@ function loggedOutMenu() {
 }
 
 function loggedInMenu(user) {
+  const staffLinks = isInstitutionStaff(user) || isAdmin(user)
+    ? '<a href="/pages/events-dashboard.html">Events</a>'
+    : "";
+  const adminLinks = isAdmin(user) ? '<a href="/pages/users.html">Users</a>' : "";
+  const addEvent = canManageEvents(user) ? '<a href="/pages/event-form.html">+ Add Event</a>' : "";
+
   return `
     <a href="/index.html">Home</a>
     <a href="/pages/profile.html">My Profile</a>
     <a href="/pages/preferences.html">Preferences</a>
     <a href="/pages/registrations.html">My Registrations</a>
-    ${canManageEvents(user) ? '<a href="/pages/event-form.html">+ Add Event</a>' : ""}
+    ${staffLinks}
+    ${adminLinks}
+    ${addEvent}
     <button type="button" id="header-logout-btn">Log out</button>
   `;
 }

@@ -117,12 +117,14 @@ class Command(BaseCommand):
                 name="Amina Wanjiru",
                 role=UserRole.STUDENT,
                 institution=institution,
+                institution_affiliation=institution.name,
             ),
             "staff": self._get_or_create_user(
                 email="staff@funkies254.test",
                 name="Brian Otieno",
                 role=UserRole.INSTITUTION_STAFF,
                 institution=institution,
+                institution_affiliation=institution.name,
             ),
             "admin": self._get_or_create_user(
                 email="admin@funkies254.test",
@@ -161,7 +163,7 @@ class Command(BaseCommand):
 
         return users
 
-    def _get_or_create_user(self, *, email, name, role, institution=None, **flags):
+    def _get_or_create_user(self, *, email, name, role, institution=None, institution_affiliation=None, **flags):
         user = User.objects.filter(email=email).first()
         if user is not None:
             return user
@@ -171,6 +173,7 @@ class Command(BaseCommand):
             name=name,
             role=role,
             institution=institution,
+            institution_affiliation=institution_affiliation,
             email_verified=True,
             **flags,
         )

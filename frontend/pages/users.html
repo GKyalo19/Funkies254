@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Users — Funkies254</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/pages.css" />
+</head>
+<body>
+  <div id="site-header"></div>
+
+  <main class="container page-section">
+    <div class="listings-banner">
+      <h1>Users</h1>
+    </div>
+    <p class="dashboard-intro" id="users-intro">Search accounts by name, email or school.</p>
+
+    <form class="user-filters" id="user-filters">
+      <input type="search" id="user-search" placeholder="Search name, email or school" />
+      <select id="user-role">
+        <option value="">All roles</option>
+        <option value="student">Student</option>
+        <option value="institution_staff">Institution staff</option>
+        <option value="admin">Admin</option>
+        <option value="super_admin">Super admin</option>
+      </select>
+      <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+    </form>
+
+    <div class="table-wrap">
+      <table class="data-table" id="users-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>School / organization</th>
+            <th>Linked institution</th>
+            <th>Role</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="users-body">
+          <tr><td colspan="6">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <div id="site-footer"></div>
+  <script type="module" src="/js/pages/users.js"></script>
+</body>
+</html>

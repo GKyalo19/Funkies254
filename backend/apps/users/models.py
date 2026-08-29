@@ -34,6 +34,12 @@ class User(AbstractBaseUser, PermissionsMixin, UUIDPrimaryKeyModel):
         related_name="members",
         db_column="institution_id",
     )
+    institution_affiliation = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        help_text="Free-text school, university or organization the user typed at signup.",
+    )
     is_active = models.BooleanField(
         default=True, help_text="Inactive accounts cannot authenticate."
     )
@@ -62,6 +68,7 @@ class User(AbstractBaseUser, PermissionsMixin, UUIDPrimaryKeyModel):
         indexes = [
             models.Index(fields=["email"], name="users_email_idx"),
             models.Index(fields=["institution"], name="users_institution_idx"),
+            models.Index(fields=["institution_affiliation"], name="users_affiliation_idx"),
             models.Index(fields=["role"], name="users_role_idx"),
         ]
 

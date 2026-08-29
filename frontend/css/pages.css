@@ -162,6 +162,11 @@ section.page-section {
 
 /* --- Search / filter bg banner on listings --- */
 .listings-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
   text-align: center;
   padding: var(--space-8) 0 var(--space-6);
 }
@@ -509,6 +514,77 @@ section.page-section {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.dashboard-intro {
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-5);
+}
+
+.dashboard-toolbar {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.user-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.user-filters input,
+.user-filters select {
+  flex: 1;
+  min-width: 180px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--color-input-bg);
+  color: var(--color-input-text);
+  font-family: var(--font-display);
+}
+
+.table-wrap {
+  overflow-x: auto;
+  background: var(--color-card);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-xl);
+  backdrop-filter: blur(16px);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  vertical-align: middle;
+}
+
+.data-table th {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.data-table .table-input,
+.data-table .role-select {
+  width: 100%;
+  min-width: 120px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--color-input-bg);
+  color: var(--color-input-text);
+  font-family: var(--font-display);
 }
 
 @media (max-width: 900px) {

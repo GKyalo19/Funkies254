@@ -70,6 +70,28 @@ def test_register_rejects_weak_password(api):
     assert "password" in response.data["errors"]
 
 
+def test_register_stores_institution_affiliation_without_linking(api):
+    payload = {**VALID_PAYLOAD, "institution_affiliation": "  Alliance High School  "}
+    response = api.post(REGISTER_URL, payload, format="json")
+
+    assert response.status_code == 201, response.data
+    user = User.objects.get(email="new.student@example.com")
+    assert user.institution_affiliation == "Alliance High School"
+    assert user.institution_id is None
+
+
+def test_student_can_update_own_affiliation(api, student, login):
+    login(student)
+    response = api.patch(
+        ME_URL, {"institution_affiliation": "Moi Girls Nairobi"}, format="json"
+    )
+
+    assert response.status_code == 200, response.data
+    student.refresh_from_db()
+    assert student.institution_affiliation == "Moi Girls Nairobi"
+    assert response.data["institution_affiliation"] == "Moi Girls Nairobi"
+
+
 def test_register_cannot_self_assign_elevated_role(api):
     response = api.post(REGISTER_URL, {**VALID_PAYLOAD, "role": "admin"}, format="json")
 

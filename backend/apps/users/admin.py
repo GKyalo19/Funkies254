@@ -25,16 +25,28 @@ class UserAdmin(DjangoUserAdmin):
     form = UserEditForm
     model = User
 
-    list_display = ("email", "name", "role", "institution", "email_verified", "is_active", "created_at")
+    list_display = (
+        "email",
+        "name",
+        "role",
+        "institution_affiliation",
+        "institution",
+        "email_verified",
+        "is_active",
+        "created_at",
+    )
     list_filter = ("role", "is_active", "email_verified", "is_staff", "institution")
-    search_fields = ("email", "name")
+    search_fields = ("email", "name", "institution_affiliation")
     ordering = ("-created_at",)
     readonly_fields = ("id", "created_at", "updated_at", "last_login")
     autocomplete_fields = ("institution",)
 
     fieldsets = (
         (None, {"fields": ("id", "email", "password")}),
-        ("Profile", {"fields": ("name", "avatar_url", "role", "institution")}),
+        (
+            "Profile",
+            {"fields": ("name", "avatar_url", "role", "institution_affiliation", "institution")},
+        ),
         (
             "Permissions",
             {
@@ -55,7 +67,15 @@ class UserAdmin(DjangoUserAdmin):
             None,
             {
                 "classes": ("wide",),
-                "fields": ("email", "name", "role", "institution", "password1", "password2"),
+                "fields": (
+                    "email",
+                    "name",
+                    "role",
+                    "institution_affiliation",
+                    "institution",
+                    "password1",
+                    "password2",
+                ),
             },
         ),
     )

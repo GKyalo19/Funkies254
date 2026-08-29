@@ -112,7 +112,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"postman.student@example.com\",\n  \"name\": \"Postman Student\",\n  \"password\": \"StrongPass!2026\",\n  \"password_confirm\": \"StrongPass!2026\"\n}"
+              "raw": "{\n  \"email\": \"postman.student@example.com\",\n  \"name\": \"Postman Student\",\n  \"password\": \"StrongPass!2026\",\n  \"password_confirm\": \"StrongPass!2026\",\n  \"institution_affiliation\": \"Alliance High School\"\n}"
             },
             "url": { "raw": "{{base_url}}/api/auth/register/", "host": ["{{base_url}}"], "path": ["api", "auth", "register", ""] }
           }
@@ -779,15 +779,27 @@
           }
         },
         {
-          "name": "Change user role (admin / super admin)",
+          "name": "Change user role (super admin)",
           "request": {
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
               { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"role\": \"institution_staff\"\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"institution_staff\",\n  \"institution_id\": \"{{institution_id}}\"\n}" },
             "url": { "raw": "{{base_url}}/api/users/{{user_id}}/role/", "host": ["{{base_url}}"], "path": ["api", "users", "{{user_id}}", "role", ""] }
+          }
+        },
+        {
+          "name": "Patch user profile (super admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\",\n  \"institution_affiliation\": \"Strathmore University\"\n}" },
+            "url": { "raw": "{{base_url}}/api/users/{{user_id}}/", "host": ["{{base_url}}"], "path": ["api", "users", "{{user_id}}", ""] }
           }
         },
         {

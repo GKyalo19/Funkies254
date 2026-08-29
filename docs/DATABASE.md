@@ -10,7 +10,8 @@ to reconstruct them in Django afterwards.
 
 ```
 User
- ├── institution_id ───────> Institution (nullable)
+ ├── institution_affiliation   (free-text school/org from signup)
+ ├── institution_id ───────> Institution (nullable; staff/event scoping)
  ├── role
  └── 1:1 ──────────────────> UserPreference
 
@@ -49,7 +50,8 @@ media columns hold Supabase Storage URLs rather than binary data.
 | `password` | varchar | No | Django hash from `AbstractBaseUser` |
 | `avatar_url` | text | Yes | Supabase Storage URL |
 | `role` | varchar(32) | No | `student`, `institution_staff`, `admin`, `super_admin` |
-| `institution_id` | UUID FK → `institutions` | Yes | `ON DELETE SET NULL` |
+| `institution_affiliation` | varchar(200) | Yes | Free-text school/org the user typed; not a foreign key |
+| `institution_id` | UUID FK → `institutions` | Yes | Staff/event scoping only; `ON DELETE SET NULL` |
 | `is_active` | boolean | No | Suspension state |
 | `is_staff` | boolean | No | Django admin access |
 | `email_verified` | boolean | No | Default `false` for self-registered accounts |
@@ -212,7 +214,7 @@ re-registering reactivates the existing row and history is preserved.
 
 | Table | Indexed columns |
 |---|---|
-| `users` | `email`, `institution_id`, `role` |
+| `users` | `email`, `institution_id`, `institution_affiliation`, `role` |
 | `institutions` | `slug`, `verified` |
 | `events` | `start_time`, `end_time`, `is_verified`, `institution_id`, `school_level_id` |
 | `event_categories` | `event_id`, `category_id` |

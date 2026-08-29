@@ -63,6 +63,18 @@ export function canManageEvents(user) {
   return ["institution_staff", "admin", "super_admin"].includes(user?.role);
 }
 
+export function isInstitutionStaff(user) {
+  return user?.role === "institution_staff";
+}
+
+export function isAdmin(user) {
+  return user?.role === "admin" || user?.role === "super_admin";
+}
+
+export function isSuperAdmin(user) {
+  return user?.role === "super_admin";
+}
+
 export function isStudent(user) {
   return user?.role === "student";
 }

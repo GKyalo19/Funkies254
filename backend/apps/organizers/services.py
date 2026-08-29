@@ -7,6 +7,17 @@ from apps.common.enums import AuditAction
 from apps.organizers.models import Institution
 
 
+def get_or_create_institution_by_name(*, name, actor=None) -> Institution:
+    """Reuse an existing institution (case-insensitive name) or create one."""
+    cleaned = (name or "").strip()
+    if not cleaned:
+        raise ValueError("An institution name is required.")
+    existing = Institution.objects.filter(name__iexact=cleaned).first()
+    if existing is not None:
+        return existing
+    return create_institution(actor=actor, name=cleaned)
+
+
 @transaction.atomic
 def create_institution(*, actor, **fields) -> Institution:
     institution = Institution.objects.create(created_by=actor, **fields)

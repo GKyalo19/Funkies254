@@ -1,25 +1,30 @@
 import { renderFooter } from "../components/footer.js";
 import { renderHeader } from "../components/header.js";
 import { api, ApiError } from "../utils/api.js";
-import { canManageEvents, requireAuth } from "../utils/auth.js";
-import { applyFieldErrors, escapeHtml, qs } from "../utils/dom.js";
+import { canManageEvents, isInstitutionStaff, requireAuth } from "../utils/auth.js";
+import { applyFieldErrors, escapeHtml, getQueryParam, qs } from "../utils/dom.js";
 import { toast } from "../utils/toast.js";
 
 let selectedCategoryIds = [];
+let editingSlug = null;
 
-async function loadFormOptions(user) {
+function toDatetimeLocal(isoString) {
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+async function loadFormOptions(user, existingEvent) {
   const [institutions, categories, schoolLevels] = await Promise.all([
     api.get("/institutions/?page_size=100"),
     api.get("/categories/"),
     api.get("/school-levels/"),
   ]);
 
-  // Staff may only publish under their own institution (enforced server-side
-  // too), so their picker is locked to it.
   const institutionSelect = qs("#institution_id");
-  const options = user.role === "institution_staff" && user.institution
-    ? [user.institution]
-    : institutions.results;
+  const options =
+    isInstitutionStaff(user) && user.institution ? [user.institution] : institutions.results;
   institutionSelect.innerHTML = options
     .map((inst) => `<option value="${escapeHtml(inst.id)}">${escapeHtml(inst.name)}</option>`)
     .join("");
@@ -27,7 +32,9 @@ async function loadFormOptions(user) {
 
   qs("#school_level_id").innerHTML =
     `<option value="">Any level</option>` +
-    schoolLevels.map((level) => `<option value="${escapeHtml(level.id)}">${escapeHtml(level.name)}</option>`).join("");
+    schoolLevels
+      .map((level) => `<option value="${escapeHtml(level.id)}">${escapeHtml(level.name)}</option>`)
+      .join("");
 
   const categoriesField = qs("#categories-field");
   categoriesField.innerHTML = categories
@@ -42,6 +49,34 @@ async function loadFormOptions(user) {
       tagEl.classList.toggle("selected");
     });
   });
+
+  if (existingEvent) fillForm(existingEvent);
+}
+
+function fillForm(event) {
+  const form = qs("#event-form");
+  form.title.value = event.title || "";
+  form.description.value = event.description || "";
+  if (event.institution?.id) form.institution_id.value = event.institution.id;
+  form.school_level_id.value = event.school_level?.id || "";
+  form.venue.value = event.venue || "";
+  form.location.value = event.location || "";
+  form.registration_link.value = event.registration_link || "";
+  form.start_time.value = toDatetimeLocal(event.start_time);
+  form.end_time.value = toDatetimeLocal(event.end_time);
+  qs("#is_virtual").checked = Boolean(event.is_virtual);
+
+  selectedCategoryIds = (event.categories || []).map((cat) => cat.id);
+  qs("#categories-field")
+    .querySelectorAll(".tag")
+    .forEach((tagEl) => {
+      tagEl.classList.toggle("selected", selectedCategoryIds.includes(tagEl.dataset.id));
+    });
+
+  if (event.cover_image_url) {
+    qs("#cover-preview").hidden = false;
+    qs("#cover-preview-img").src = event.cover_image_url;
+  }
 }
 
 /** Virtual events must not carry physical location data (§10.1). */
@@ -70,11 +105,7 @@ function wireCoverPreview() {
   const img = qs("#cover-preview-img");
   input.addEventListener("change", () => {
     const file = input.files[0];
-    if (!file) {
-      preview.hidden = true;
-      img.removeAttribute("src");
-      return;
-    }
+    if (!file) return;
     img.src = URL.createObjectURL(file);
     preview.hidden = false;
   });
@@ -88,12 +119,13 @@ function buildFormData(form) {
   data.append("description", form.description.value.trim());
   data.append("institution_id", form.institution_id.value);
   data.append("is_virtual", isVirtual ? "true" : "false");
-  // datetime-local yields local wall time; convert to UTC ISO for the API.
   data.append("start_time", new Date(form.start_time.value).toISOString());
   data.append("end_time", new Date(form.end_time.value).toISOString());
 
   if (form.school_level_id.value) data.append("school_level_id", form.school_level_id.value);
-  if (form.registration_link.value.trim()) data.append("registration_link", form.registration_link.value.trim());
+  if (form.registration_link.value.trim()) {
+    data.append("registration_link", form.registration_link.value.trim());
+  }
 
   if (!isVirtual) {
     if (form.venue.value.trim()) data.append("venue", form.venue.value.trim());
@@ -119,13 +151,15 @@ async function handleSubmit(event) {
   }
 
   submitBtn.disabled = true;
-  submitBtn.textContent = "Creating...";
+  submitBtn.textContent = editingSlug ? "Saving..." : "Creating...";
 
   try {
-    // Cover image travels with the create request; there is no separate upload endpoint.
-    const created = await api.upload("/events/", buildFormData(form));
-    toast.success("Event created — awaiting admin verification.");
-    window.location.href = `/pages/event.html?slug=${encodeURIComponent(created.slug)}`;
+    const payload = buildFormData(form);
+    const saved = editingSlug
+      ? await api.upload(`/events/${editingSlug}/`, payload, "PATCH")
+      : await api.upload("/events/", payload);
+    toast.success(editingSlug ? "Event updated." : "Event created — awaiting admin verification.");
+    window.location.href = `/pages/event.html?slug=${encodeURIComponent(saved.slug)}`;
   } catch (err) {
     if (err instanceof ApiError) {
       applyFieldErrors(form, err.fields);
@@ -135,7 +169,7 @@ async function handleSubmit(event) {
     }
   } finally {
     submitBtn.disabled = false;
-    submitBtn.textContent = "Create Event";
+    submitBtn.textContent = editingSlug ? "Save changes" : "Create Event";
   }
 }
 
@@ -151,9 +185,29 @@ async function init() {
     return;
   }
 
+  if (isInstitutionStaff(user) && !user.institution) {
+    document.querySelector("main").innerHTML = `<div class="empty-state">Your account is not linked to an institution yet. Ask a super administrator to promote/link you before creating events.</div>`;
+    return;
+  }
+
+  editingSlug = getQueryParam("slug");
+  let existingEvent = null;
+  if (editingSlug) {
+    try {
+      existingEvent = await api.get(`/events/${editingSlug}/`);
+    } catch {
+      toast.error("Could not load that event.");
+      return;
+    }
+    qs("#event-form-heading").textContent = "Edit Event";
+    qs("#event-form-intro").textContent = "Update the listing. Students only see verified events.";
+    qs("#submit-btn").textContent = "Save changes";
+    document.title = "Edit Event — Funkies254";
+  }
+
   try {
-    await loadFormOptions(user);
-  } catch (err) {
+    await loadFormOptions(user, existingEvent);
+  } catch {
     toast.error("Could not load the form options.");
     return;
   }

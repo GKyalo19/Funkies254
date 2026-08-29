@@ -4,6 +4,7 @@ from django.urls import path
 
 from apps.users.views import (
     MeView,
+    UserAdminDetailView,
     UserListView,
     UserReinstateView,
     UserRoleView,
@@ -16,4 +17,5 @@ urlpatterns = [
     path("users/<uuid:pk>/suspend/", UserSuspendView.as_view(), name="user-suspend"),
     path("users/<uuid:pk>/reinstate/", UserReinstateView.as_view(), name="user-reinstate"),
     path("users/<uuid:pk>/role/", UserRoleView.as_view(), name="user-role"),
+    path("users/<uuid:pk>/", UserAdminDetailView.as_view(), name="user-admin-detail"),
 ]
