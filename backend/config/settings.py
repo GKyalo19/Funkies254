@@ -288,6 +288,7 @@ EMAIL_PORT = config("EMAIL_PORT", cast=int, default=2525)
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool, default=True)
+MAILTRAP_API_TOKEN = config("MAILTRAP_API_TOKEN", default="")
 EMAIL_BACKEND = config(
     "EMAIL_BACKEND",
     default=(
