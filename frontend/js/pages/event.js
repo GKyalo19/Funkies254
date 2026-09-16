@@ -3,7 +3,7 @@ import { renderEventGrid, toEventList } from "../components/event-card.js";
 import { renderHeader } from "../components/header.js";
 import { api, ApiError } from "../utils/api.js";
 import { getCurrentUser, initials, isStudent } from "../utils/auth.js";
-import { escapeHtml, formatDate, formatTimeRange, getQueryParam, qs } from "../utils/dom.js";
+import { escapeHtml, formatDateRange, formatTimeRange, getQueryParam, qs } from "../utils/dom.js";
 import { avatarInnerHtml, coverInnerHtml } from "../utils/media.js";
 import { toast } from "../utils/toast.js";
 
@@ -138,7 +138,7 @@ function renderEvent(event) {
           <div class="info-row">
             <div class="icon"><img src="/assets/icons/icon-calendar.svg" alt="" /></div>
             <div>
-              <strong>${formatDate(event.start_time)}</strong>
+              <strong>${formatDateRange(event.start_time, event.end_time)}</strong>
               <p style="margin:2px 0 0;color:var(--color-text-muted);">${formatTimeRange(event.start_time, event.end_time)}</p>
             </div>
           </div>

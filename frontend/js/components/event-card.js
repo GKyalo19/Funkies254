@@ -1,5 +1,5 @@
 /** Renders a single event card — reused on the home feed, listings, and "similar events". */
-import { escapeHtml, formatShortDate } from "../utils/dom.js";
+import { escapeHtml, formatShortDateRange } from "../utils/dom.js";
 import { coverInnerHtml } from "../utils/media.js";
 
 /**
@@ -21,7 +21,9 @@ export function createEventCard(event) {
   const card = document.createElement("a");
   card.className = "event-card";
   card.href = `/pages/event.html?slug=${encodeURIComponent(event.slug)}`;
-  const subtitle = event.institution?.name || event.location || event.venue || "";
+  const venue = event.is_virtual
+    ? "Virtual"
+    : event.venue || event.location || event.institution?.name || "Venue TBC";
   card.innerHTML = `
     <div class="cover">
       ${event.is_virtual ? '<span class="badge">Virtual</span>' : ""}
@@ -30,8 +32,10 @@ export function createEventCard(event) {
     <div class="overlay"></div>
     <div class="body">
       <h3>${escapeHtml(event.title)}</h3>
-      <p class="meta">${escapeHtml(subtitle)}</p>
-      <p class="meta">${formatShortDate(event.start_time)}</p>
+      <p class="meta meta-row">
+        <span>${escapeHtml(formatShortDateRange(event.start_time, event.end_time))}</span>
+        <span>${escapeHtml(venue)}</span>
+      </p>
     </div>
   `;
   return card;

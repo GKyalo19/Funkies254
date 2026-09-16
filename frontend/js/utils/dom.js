@@ -56,28 +56,58 @@ function parseDate(isoString) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+const DISPLAY_TZ = "Africa/Nairobi";
+
 export function formatDate(isoString) {
   const date = parseDate(isoString);
   if (!date) return "";
-  return date.toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  return date.toLocaleDateString("en-KE", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: DISPLAY_TZ,
+  });
+}
+
+/** "Fri, 20 Sep 2026 - Sat, 21 Sep 2026". Always includes the end date when one is set. */
+export function formatDateRange(startIso, endIso) {
+  const start = formatDate(startIso);
+  if (!start) return "";
+  const end = formatDate(endIso);
+  if (!end) return start;
+  return `${start} - ${end}`;
 }
 
 /** Compact date for event cards, e.g. "Nov 27th". */
 export function formatShortDate(isoString) {
   const date = parseDate(isoString);
   if (!date) return "";
-  const day = date.getDate();
+  const day = Number(
+    new Intl.DateTimeFormat("en-KE", { day: "numeric", timeZone: DISPLAY_TZ }).format(date)
+  );
   const suffix = day % 10 === 1 && day !== 11 ? "st" : day % 10 === 2 && day !== 12 ? "nd" : day % 10 === 3 && day !== 13 ? "rd" : "th";
-  return `${date.toLocaleDateString("en-KE", { month: "short" })} ${day}${suffix}`;
+  const month = date.toLocaleDateString("en-KE", { month: "short", timeZone: DISPLAY_TZ });
+  return `${month} ${day}${suffix}`;
+}
+
+/** Compact range for event cards, e.g. "Nov 27th - Nov 29th". */
+export function formatShortDateRange(startIso, endIso) {
+  const start = formatShortDate(startIso);
+  if (!start) return "";
+  const end = formatShortDate(endIso);
+  if (!end || end === start) return start;
+  return `${start} - ${end}`;
 }
 
 export function formatTimeRange(startIso, endIso) {
   const start = parseDate(startIso);
   if (!start) return "";
-  const startTime = start.toLocaleTimeString("en-KE", { hour: "numeric", minute: "2-digit" });
+  const opts = { hour: "numeric", minute: "2-digit", timeZone: DISPLAY_TZ };
+  const startTime = start.toLocaleTimeString("en-KE", opts);
   const end = parseDate(endIso);
   if (!end) return startTime;
-  const endTime = end.toLocaleTimeString("en-KE", { hour: "numeric", minute: "2-digit" });
+  const endTime = end.toLocaleTimeString("en-KE", opts);
   return `${startTime} - ${endTime}`;
 }
 

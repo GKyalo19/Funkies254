@@ -446,7 +446,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  height: 26%;
+  height: 30%;
   background: rgba(0, 0, 0, 0.72);
   backdrop-filter: blur(6px);
 }
@@ -456,14 +456,14 @@
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 14px 18px 18px;
+  padding: 14px 18px 16px;
   text-align: center;
   color: #fff;
 }
 
 .event-card h3 {
   font-size: 18px;
-  margin: 0 0 4px;
+  margin: 0 0 8px;
   color: var(--color-gold-bright);
   font-family: var(--font-display);
   font-weight: 700;
@@ -474,6 +474,26 @@
   margin: 0;
   color: #fff;
   line-height: 1.35;
+}
+
+.event-card .meta-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+.event-card .meta-row span:first-child {
+  flex: 0 1 auto;
+  white-space: nowrap;
+}
+
+.event-card .meta-row span:last-child {
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .event-card .fee {
@@ -643,9 +663,11 @@
 
 .footer-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr;
-  gap: var(--space-6);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: clamp(48px, 8vw, 96px);
+  row-gap: var(--space-6);
   align-items: start;
+  justify-content: space-between;
 }
 
 .footer-contact p {
@@ -702,6 +724,9 @@
   padding: var(--space-4) var(--space-4) var(--space-5);
   color: #111;
   text-align: center;
+  justify-self: end;
+  width: 100%;
+  max-width: 340px;
 }
 
 .mailing-card h4 {
@@ -762,6 +787,10 @@
     grid-template-columns: 1fr;
     gap: var(--space-6);
     text-align: center;
+  }
+  .mailing-card {
+    justify-self: center;
+    max-width: none;
   }
   .footer-contact-line {
     justify-content: center;
