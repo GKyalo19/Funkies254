@@ -10,9 +10,9 @@ events for them.
 ## Tech stack
 
 - **Backend**: Python, Django, Django REST Framework, SimpleJWT (httpOnly cookie auth)
-- **Database & media storage**: PostgreSQL + Storage on Supabase (free tier)
+- **Database & media storage**: PostgreSQL + Storage on Supabase 
 - **Frontend**: Vanilla HTML, CSS, and JavaScript (ES modules, no build step)
-- **Hosting**: Render (backend), Netlify (frontend) — both free tiers
+- **Hosting**: Render (backend), Vercel (frontend)
 - **Testing**: pytest + pytest-django
 
 ## Status
