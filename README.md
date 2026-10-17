@@ -8,51 +8,6 @@ events for them.
 <img width="2942" height="1724" alt="image" src="https://github.com/user-attachments/assets/f74100a1-756c-4534-800d-d1a83668cecb" />
 
 
-```
-Funkies254 Dev/
-├── backend/     Django + Django REST Framework API
-├── frontend/    Vanilla HTML/CSS/JS client
-└── docs/        Architecture, setup, API reference, and deployment guides
-```
-
-## Quick start
-
-```bash
-# Backend
-cd backend
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements-dev.txt
-cp .env.example .env
-python manage.py migrate
-python manage.py seed_demo_data
-python manage.py createsuperuser
-python manage.py runserver 8000
-
-# Frontend (in a second terminal)
-cd frontend
-python3 -m http.server 5500
-```
-
-Then open `http://127.0.0.1:5500/index.html`. Full instructions (including Supabase
-setup): see [`docs/SETUP.md`](docs/SETUP.md).
-
-To exercise the API on its own, import
-[`docs/Funkies254.postman_collection.json`](docs/Funkies254.postman_collection.json) into
-Postman and run **Auth → Login (student)** first — authentication is cookie-based and
-Postman replays the cookies automatically.
-
-## Documentation
-
-| Doc | What's in it |
-|---|---|
-| [`docs/FILE_GUIDE.md`](docs/FILE_GUIDE.md) | File-by-file map of the whole repo — what each file does and where to go to change something |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Why each technology was chosen, how the frontend/backend/database talk to each other |
-| [`docs/SETUP.md`](docs/SETUP.md) | Step-by-step local dev setup, including Supabase configuration and Postman testing |
-| [`docs/API.md`](docs/API.md) | Every REST endpoint, request/response shapes, and `curl` examples |
-| [`docs/DATABASE.md`](docs/DATABASE.md) | ERD, table-by-table schema, constraints, indexes, migration workflow |
-| [`docs/SECURITY.md`](docs/SECURITY.md) | Cookies, CORS/CSRF, roles and ownership, secrets, storage access |
-| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Deploying for free to Render (backend) + Netlify (frontend) |
-
 ## Tech stack
 
 - **Backend**: Python, Django, Django REST Framework, SimpleJWT (httpOnly cookie auth)
