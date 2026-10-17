@@ -5,6 +5,9 @@ events — academic competitions, sports tournaments, and social events — happ
 eventually beyond) Kenya. Students set their interests once, and the home feed curates
 events for them.
 
+<img width="2942" height="1724" alt="image" src="https://github.com/user-attachments/assets/f74100a1-756c-4534-800d-d1a83668cecb" />
+
+
 ```
 Funkies254 Dev/
 ├── backend/     Django + Django REST Framework API
