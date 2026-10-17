@@ -1,4 +1,4 @@
-# Funkies254
+<a href="https://www.funkies254.com/" style="font-family: 'Courier New', monospace; font-size: 18px; margin-left: 20px;" target="_blank" rel="noopener noreferrer">Funkies254</a> 
 
 Funkies254 is a platform for Kenyan high school and college students to discover student
 events — academic competitions, sports tournaments, and social events — happening in (and
@@ -6,8 +6,6 @@ eventually beyond) Kenya. Students set their interests once, and the home feed c
 events for them.
 
 <img width="2942" height="1724" alt="image" src="https://github.com/user-attachments/assets/f74100a1-756c-4534-800d-d1a83668cecb" />
-
-<a href="https://www.funkies254.com/" target="_blank" rel="noopener noreferrer">Funkies254</a> 
 
 ## Tech stack
 
