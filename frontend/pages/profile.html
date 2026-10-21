@@ -16,12 +16,11 @@
 
   <main class="container profile-page-wrap">
     <nav class="profile-tabs">
-      <a href="/pages/profile.html" class="active">My Profile</a>
-      <a href="/pages/preferences.html">Preferences</a>
-      <a href="/pages/registrations.html">My Registrations</a>
+      <button type="button" data-tab="profile" class="active">My Profile</button>
+      <button type="button" data-tab="preferences">My Preferences</button>
     </nav>
 
-    <section class="card-panel">
+    <section class="card-panel" id="tab-profile">
       <h1>Account Profile</h1>
 
       <div class="avatar-upload-row">
@@ -59,7 +58,24 @@
         </div>
       </form>
 
-      <a href="/pages/preferences.html" class="manage-prefs-link">Manage preferences?</a>
+      <h2>Change password</h2>
+      <form id="password-form">
+        <div class="field"><input type="password" name="current_password" placeholder="Current password" required /></div>
+        <div class="field"><input type="password" name="new_password" placeholder="New password" required minlength="8" /></div>
+        <div class="field"><input type="password" name="new_password_confirm" placeholder="Confirm new password" required minlength="8" /></div>
+        <button class="btn btn-secondary" type="submit">Update password</button>
+      </form>
+      <h2>Delete my account</h2>
+      <form id="delete-form">
+        <div class="field"><input type="password" name="password" placeholder="Confirm with your password" required /></div>
+        <button class="btn btn-danger" type="submit">Delete my account</button>
+      </form>
+    </section>
+
+    <section class="card-panel" id="tab-preferences" hidden>
+      <h1>My Preferences</h1>
+      <p id="onboarding-note" hidden>Choose at least one interest before continuing.</p>
+      <form id="preferences-form"></form>
     </section>
   </main>
 

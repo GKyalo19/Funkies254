@@ -111,6 +111,52 @@ export function formatTimeRange(startIso, endIso) {
   return `${startTime} - ${endTime}`;
 }
 
+/** "Sat 14 Nov 2026" in Africa/Nairobi. */
+export function formatCardDate(isoString) {
+  const date = parseDate(isoString);
+  if (!date) return "";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: DISPLAY_TZ,
+  }).formatToParts(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("weekday")} ${get("day")} ${get("month")} ${get("year")}`;
+}
+
+/**
+ * Eye button inside a password field. Hidden by default.
+ * Looks for a wrapper `.password-field` or creates nothing if the input is missing.
+ */
+export function attachPasswordToggle(input) {
+  if (!input || input.dataset.toggleReady) return;
+  input.dataset.toggleReady = "1";
+  const wrap = input.parentElement;
+  if (!wrap) return;
+  wrap.classList.add("password-field");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "password-toggle";
+  button.setAttribute("aria-label", "Show password");
+  button.innerHTML = eyeIcon(false);
+  button.addEventListener("click", () => {
+    const showing = input.type === "text";
+    input.type = showing ? "password" : "text";
+    button.setAttribute("aria-label", showing ? "Show password" : "Hide password");
+    button.innerHTML = eyeIcon(!showing);
+  });
+  wrap.appendChild(button);
+}
+
+function eyeIcon(open) {
+  if (open) {
+    return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>`;
+  }
+  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 3l18 18" stroke="currentColor" stroke-width="2"/><path d="M10.6 6.2A10.7 10.7 0 0 1 12 6c6.5 0 10 6 10 6a18 18 0 0 1-4.1 4.6" stroke="currentColor" stroke-width="2"/><path d="M6.1 6.1C3.5 7.8 2 12 2 12s3.5 7 10 7c1.6 0 3-.3 4.2-.9" stroke="currentColor" stroke-width="2"/></svg>`;
+}
+
 /** Formats an ISO timestamp for a <input type="datetime-local"> value, in local time. */
 export function toDatetimeLocalValue(isoString) {
   const date = parseDate(isoString);

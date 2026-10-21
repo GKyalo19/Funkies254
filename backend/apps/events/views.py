@@ -2,7 +2,9 @@
 
 import uuid
 
+from django.db.models import BooleanField, Case, Value, When
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -10,24 +12,35 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.common.permissions import IsAdmin, IsEventOwner, IsStaffOrReadOnly, IsStudent
+from apps.common.enums import SchoolLevelSlug
+from apps.common.permissions import IsAdmin, IsEventOwner, IsStaffOrReadOnly
 from apps.events.filters import EventFilter
-from apps.events.models import Category, Event, SavedEvent, SchoolLevel
+from apps.events.models import Category, Event, SavedEvent, SchoolLevel, SearchQuery, Section
 from apps.events.serializers import (
     CategorySerializer,
     EventSerializer,
     EventWriteSerializer,
     SavedEventSerializer,
     SchoolLevelSerializer,
+    SectionSerializer,
 )
 from apps.events.services import (
     create_event,
     delete_event,
+    record_click_out,
+    record_event_view,
     save_event,
     set_event_verified,
     unsave_event,
     update_event,
 )
+
+
+def client_ip(request):
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip() or None
+    return request.META.get("REMOTE_ADDR") or None
 
 
 class _EventContextMixin:
@@ -54,25 +67,56 @@ class CategoryListView(generics.ListAPIView):
     """Reference taxonomy used by event forms and preference pickers (§18)."""
 
     serializer_class = CategorySerializer
-    queryset = Category.objects.all()
     permission_classes = (AllowAny,)
     pagination_class = None
     search_fields = ("name", "slug")
 
+    def get_queryset(self):
+        queryset = Category.objects.filter(is_active=True).select_related("section")
+        section = self.request.query_params.get("section")
+        if section:
+            queryset = queryset.filter(section__slug=section)
+        return queryset.order_by("sort_order", "name")
+
+
+class SectionListView(generics.ListAPIView):
+    """Active sections with their active categories nested (CAT-4)."""
+
+    serializer_class = SectionSerializer
+    permission_classes = (AllowAny,)
+    pagination_class = None
+
+    def get_queryset(self):
+        return (
+            Section.objects.filter(is_active=True)
+            .prefetch_related("categories")
+            .order_by("sort_order", "name")
+        )
+
 
 class SchoolLevelListView(generics.ListAPIView):
     serializer_class = SchoolLevelSerializer
-    queryset = SchoolLevel.objects.all()
     permission_classes = (AllowAny,)
     pagination_class = None
+
+    def get_queryset(self):
+        # Primary is kept in the table for old rows but hidden from sign-up and filters.
+        return SchoolLevel.objects.exclude(slug=SchoolLevelSlug.PRIMARY)
 
 
 class EventListCreateView(_EventContextMixin, generics.ListCreateAPIView):
     permission_classes = (IsStaffOrReadOnly,)
     parser_classes = (JSONParser, MultiPartParser, FormParser)
     filterset_class = EventFilter
-    search_fields = ("title", "description", "venue", "location")
-    ordering_fields = ("start_time", "end_time", "created_at", "title")
+    search_fields = (
+        "title",
+        "description",
+        "venue",
+        "location",
+        "categories__name",
+        "institution__name",
+    )
+    ordering_fields = ("start_time", "end_time", "created_at", "title", "popularity_score")
     ordering = ("start_time",)
 
     def get_serializer_class(self):
@@ -85,7 +129,37 @@ class EventListCreateView(_EventContextMixin, generics.ListCreateAPIView):
             if not user.is_authenticated:
                 raise PermissionDenied("Authentication is required to list your own events.")
             queryset = queryset.filter(created_by=user)
+        searching = bool((self.request.query_params.get("search") or "").strip())
+        # Upcoming only, unless the caller is searching or asked for upcoming explicitly (EVT-4).
+        if "upcoming" not in self.request.query_params and not searching:
+            queryset = queryset.upcoming()
         return queryset
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset).distinct()
+        params = self.request.query_params
+        if (params.get("search") or "").strip() and "ordering" not in params:
+            now = timezone.now()
+            queryset = queryset.annotate(
+                is_past_flag=Case(
+                    When(end_time__lt=now, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                )
+            ).order_by("is_past_flag", "start_time", "id")
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        query = (request.query_params.get("search") or "").strip().lower()[:200]
+        if query:
+            count = response.data.get("count", 0) if isinstance(response.data, dict) else 0
+            SearchQuery.objects.create(
+                query=query,
+                results_count=count,
+                user=request.user if request.user.is_authenticated else None,
+            )
+        return response
 
     def create(self, request, *args, **kwargs):
         serializer = EventWriteSerializer(data=request.data, context={"request": request})
@@ -147,6 +221,15 @@ class EventDetailView(_EventContextMixin, generics.RetrieveUpdateDestroyAPIView)
         event = Event.objects.with_related().get(pk=event.pk)
         return Response(EventSerializer(event, context=self.get_serializer_context()).data)
 
+    def retrieve(self, request, *args, **kwargs):
+        event = self.get_object()
+        record_event_view(
+            event=event,
+            user=request.user if request.user.is_authenticated else None,
+            ip_address=client_ip(request),
+        )
+        return Response(EventSerializer(event, context=self.get_serializer_context()).data)
+
     def destroy(self, request, *args, **kwargs):
         delete_event(actor=request.user, event=self.get_object())
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -167,10 +250,30 @@ class EventVerifyView(APIView):
         return Response(EventSerializer(event, context={"request": request}).data)
 
 
-class EventSaveView(APIView):
-    """Save/unsave an event for the authenticated student (§10.2)."""
+class EventClickOutView(APIView):
+    """POST /api/events/{id}/click-out/ — public outbound registration click (EVT-3)."""
 
-    permission_classes = (IsStudent,)
+    permission_classes = (AllowAny,)
+
+    def post(self, request, identifier):
+        event = _resolve_event(identifier, Event.objects.all())
+        record_click_out(
+            event=event,
+            user=request.user if request.user.is_authenticated else None,
+            ip_address=client_ip(request),
+        )
+        return Response(
+            {
+                "recorded": True,
+                "registration_link": event.registration_link,
+            }
+        )
+
+
+class EventSaveView(APIView):
+    """Save/unsave an event for any signed-in user (CARD-1)."""
+
+    permission_classes = (IsAuthenticated,)
 
     def post(self, request, identifier):
         event = _resolve_event(identifier, Event.objects.visible_to(request.user))

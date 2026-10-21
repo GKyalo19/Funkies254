@@ -9,6 +9,10 @@ case use `multipart/form-data`.
 A ready-to-import Postman collection lives at
 [`Funkies254.postman_collection.json`](Funkies254.postman_collection.json).
 
+The launch contract is `docs/SPEC.md`. In short: discovery is view-only,
+`POST /api/registrations/` returns `410`, event lists are upcoming-only unless
+the caller is searching, and preferences are required after email verification.
+
 ---
 
 ## 1. Authentication model
@@ -38,10 +42,11 @@ Authentication is a Django-issued JWT pair carried in **httpOnly cookies**:
 
 | Role | Can |
 |---|---|
-| `student` | View events, save, register, edit own profile and school affiliation, manage own preferences |
-| `institution_staff` | Create and edit own institution's events, view registrations for those events |
-| `admin` | List/search users, curate and verify events, suspend non-admin users |
+| `student` | View events, bookmark them, edit own profile, manage preferences, change password, delete own account |
+| `institution_staff` | Create and edit own institution's events, view historical registrations for those events, bookmark events |
+| `admin` | List/search users, curate and verify events, review agent proposals, suspend non-admin users |
 | `super_admin` | Everything an admin can do, plus changing roles, editing other accounts, and creating/removing admins |
+| `agent` | Service account used by the ingestion job. It cannot sign in |
 
 Registration always creates a `student`. Elevated roles are granted only by a
 `super_admin` through `POST /api/users/{id}/role/` or the Django admin. Promoting
@@ -232,7 +237,17 @@ in so the API can reuse/create that institution. Otherwise `400`.
   "school_level": { "id": "…", "name": "Senior Secondary", "slug": "senior-secondary" },
   "email_notifications": true,
   "push_notifications": false,
-  "preferred_categories": [ { "id": "…", "name": "Math", "slug": "math" } ]
+  "sections": [ { "id": "…", "name": "College Events", "slug": "college-events" } ],
+  "formats": ["in_person", "online", "hybrid"],
+  "days": ["weekdays", "weekends"],
+  "country": "Kenya",
+  "city": "Nairobi",
+  "latitude": "-1.29",
+  "longitude": "36.82",
+  "max_distance_km": 25,
+  "include_other_countries": false,
+  "free_only": false,
+  "preferred_categories": [ { "id": "…", "name": "Math", "slug": "math", "section": null } ]
 }
 ```
 
@@ -241,25 +256,41 @@ in so the API can reuse/create that institution. Otherwise `400`.
 ```json
 {
   "school_level_id": "…",
+  "section_ids": ["…"],
+  "formats": ["in_person", "online"],
+  "days": ["weekdays"],
+  "country": "Kenya",
+  "city": "Nairobi",
+  "latitude": -1.2921,
+  "longitude": 36.8219,
+  "max_distance_km": 25,
+  "include_other_countries": false,
+  "free_only": true,
   "email_notifications": false,
-  "push_notifications": true,
   "preferred_category_ids": ["…", "…"]
 }
 ```
 
-`preferred_category_ids` replaces the whole selection.
+`preferred_category_ids` and `section_ids` replace the whole selection.
+Coordinates are stored to two decimal places. `formats` must be one or more of
+`in_person`, `online`, `hybrid`. `days` must be `weekdays`, `weekends`, or both.
+`max_distance_km` is `10`, `25`, `50`, `100`, or `null`.
 
 ---
 
 ## 6. Reference data
 
-### `GET /api/categories/` — public
+### `GET /api/sections/` — public
 
-`[{ "id": "…", "name": "Sports", "slug": "sports" }, …]`
+Sections in sort order, each with its active categories nested.
+
+### `GET /api/categories/?section=college-events` — public
+
+`[{ "id": "…", "name": "Health & Medicine", "slug": "health-medicine", "section": { … } }, …]`
 
 ### `GET /api/school-levels/` — public
 
-`[{ "id": "…", "name": "College", "slug": "college" }, …]`
+Junior Secondary, Senior Secondary, and College. Primary is stored but omitted.
 
 ---
 
@@ -327,10 +358,15 @@ everything.
 | `is_virtual` | `?is_virtual=true` |
 | `is_verified` | `?is_verified=false` (staff/admin views) |
 | `start_after` / `start_before` | `?start_after=2026-09-01T00:00:00Z` |
-| `upcoming` | `?upcoming=true` hides events that already ended |
-| `search` | `?search=chess` (title, description, venue, location) |
+| `upcoming` | Omitted: upcoming only, unless `search` is set. `?upcoming=false` includes past events |
+| `search` | `?search=chess` (title, description, venue, location). Upcoming matches come first, then past matches. Each search is logged |
+| `section` | `?section=college-events` |
+| `format` | `?format=online` (`in_person`, `online`, `hybrid`) |
+| `country` | `?country=Kenya` |
+| `is_free` | `?is_free=true` |
+| `near` | `?near=-1.29,36.82&radius_km=25` |
 | `mine` | `?mine=true` restricts to events you created |
-| `ordering` | `?ordering=-start_time` |
+| `ordering` | `?ordering=-start_time` or `?ordering=-popularity_score` |
 
 ### `GET /api/events/{slug}/` — public
 
@@ -427,7 +463,11 @@ Paginated registrations for that event, each with the student attached.
 
 ## 9. Saved events
 
-### `POST /api/events/{id}/save/` — student
+### `POST /api/events/{id}/click-out/` — public
+
+Records an outbound registration click, then the client opens `registration_link`.
+
+### `POST /api/events/{id}/save/` — any signed-in user
 
 `201` on the first save, `200` with `"already_saved": true` if it was already
 saved. Uniqueness is enforced by a database constraint.
@@ -436,7 +476,7 @@ saved. Uniqueness is enforced by a database constraint.
 { "saved": true, "already_saved": false, "event_id": "…", "saved_at": "…" }
 ```
 
-### `DELETE /api/events/{id}/save/` — student
+### `DELETE /api/events/{id}/save/` — the user who saved it
 
 `{ "saved": false, "was_saved": true }`
 
@@ -451,30 +491,21 @@ saved. Uniqueness is enforced by a database constraint.
 
 ## 10. Registrations
 
-### `POST /api/registrations/` — student
+### `POST /api/registrations/` — public, closed
 
-```json
-{ "event_id": "…" }
-```
-
-or `{ "event_slug": "county-chess-championship" }`.
-
-`201` on a new registration, `200` if a previously cancelled registration was
-reactivated, `409` if you are already registered, `400` if the event is
-unverified or has already ended. A confirmation email is sent after a
-successful register or reactivation. The event row is locked for the duration of
-the transaction, and the unique `(user, event)` constraint is the final guard
-against races.
+Always `410 Gone`.
 
 ```json
 {
-  "id": "…",
-  "user": { "id": "…", "name": "Amina Wanjiru", "email": "…", "role": "student", "avatar_url": null },
-  "event": { … },
-  "status": "registered",
-  "registered_at": "…"
+  "detail": "On-site registration has closed. Use the organiser's registration link.",
+  "code": "registration_external",
+  "registration_link": "https://events.example.com/register"
 }
 ```
+
+`registration_link` is included when `event_id` or `event_slug` resolves.
+Historical rows are still listed, cancelled, and marked attended by the
+endpoints below. New sign-ups happen on the organiser's site.
 
 ### `GET /api/users/me/registrations/` — authenticated
 
@@ -519,11 +550,59 @@ registration is not yours.
 }
 ```
 
-Rules and weights: category overlap (3.0 each, capped at 9.0), school-level
-match (2.5), location match (2.0), own-institution match (1.5) and a
-happening-soon boost that decays from 1.0 to 0 over 14 days. Anonymous visitors
-get the soonest upcoming verified events with `personalised: false`. Ranking is
-deterministic: ties break on start time, then event id.
+Signed-in users with preferences are ordered by preference match, then
+distance, then popularity. Anonymous visitors and users without preferences are
+ordered by popularity, then soonest start. Popularity over the last 30 days is
+`3 * saves + 2 * click-outs + 1 * views + 5 * external_mentions`.
+
+---
+
+## 11b. Account maintenance
+
+### `POST /api/users/me/password/` — authenticated
+
+```json
+{ "current_password": "…", "new_password": "…", "new_password_confirm": "…" }
+```
+
+### `POST /api/users/me/delete/` — authenticated
+
+```json
+{ "password": "…" }
+```
+
+Deletes the account, or anonymises it when a protected relation blocks deletion.
+Writes `deleted_account` to the admin activity log.
+
+---
+
+## 11c. Agent review and newsletter
+
+### `GET /api/agent/proposals/` — admin
+
+Pending proposals from the ingestion job.
+
+### `POST /api/agent/proposals/{id}/approve/` — admin
+
+### `POST /api/agent/proposals/{id}/reject/` — admin
+
+### `POST /api/agent/proposals/approve-all/` — admin
+
+Each decision writes `approved_proposal` or `rejected_proposal` to the activity
+log. Approved events stay unverified until an admin publishes them, and
+publishing still requires an `https://` registration link.
+
+### `GET /api/admin/health-report/latest/` — admin
+
+The latest agent run: status, stats, and errors.
+
+### `POST /api/newsletter/` — public
+
+```json
+{ "email": "ada@example.com" }
+```
+
+Stores one row per address.
 
 ---
 

@@ -1,8 +1,8 @@
 import { renderFooter } from "../components/footer.js";
-import { renderEventGrid, toEventList } from "../components/event-card.js";
+import { openRegistration, renderEventGrid, toEventList } from "../components/event-card.js";
 import { renderHeader } from "../components/header.js";
 import { api, ApiError } from "../utils/api.js";
-import { getCurrentUser, initials, isStudent } from "../utils/auth.js";
+import { getCurrentUser, initials } from "../utils/auth.js";
 import { escapeHtml, formatDateRange, formatTimeRange, getQueryParam, qs } from "../utils/dom.js";
 import { avatarInnerHtml, coverInnerHtml } from "../utils/media.js";
 import { toast } from "../utils/toast.js";
@@ -34,55 +34,21 @@ function institutionRowHtml(institution) {
 }
 
 function actionCardHtml(event) {
-  const attendees = `<p class="spots">${event.registration_count} registered</p>`;
-
-  // Events that point at an external sign-up form are informational here: the
-  // API deliberately has no internal registration for them.
-  if (event.registration_link) {
-    return `
-      <div class="registration-card">
-        <h4>${escapeHtml(event.is_virtual ? "Virtual event" : event.venue || event.location || "Venue TBC")}</h4>
-        ${attendees}
-        <a class="btn btn-gold btn-block" href="${escapeHtml(event.registration_link)}" target="_blank" rel="noopener">Register externally</a>
-        ${saveButtonHtml(event)}
-      </div>
-    `;
-  }
-
-  if (!currentUser) {
-    return `
-      <div class="registration-card">
-        <h4>${escapeHtml(event.venue || event.location || "Venue TBC")}</h4>
-        ${attendees}
-        <a class="btn btn-gold btn-block" href="/pages/login.html">Log in to register</a>
-      </div>
-    `;
-  }
-
-  if (!isStudent(currentUser)) {
-    return `
-      <div class="registration-card">
-        <h4>${escapeHtml(event.venue || event.location || "Venue TBC")}</h4>
-        ${attendees}
-        <p class="spots">Staff and admin accounts don't register for events.</p>
-      </div>
-    `;
-  }
-
+  const cost = event.is_free === false && event.cost_note
+    ? `<p class="spots">${escapeHtml(event.cost_note)}</p>`
+    : `<p class="spots">${event.is_free === false ? "Paid" : "Free"}</p>`;
   return `
     <div class="registration-card">
-      <h4>${escapeHtml(event.venue || event.location || "Venue TBC")}</h4>
-      ${attendees}
-      <button class="btn btn-block ${event.is_registered ? "btn-danger" : "btn-gold"}" id="register-btn">
-        ${event.is_registered ? "Cancel registration" : "Register"}
-      </button>
+      <h4>${escapeHtml(event.format === "online" || event.is_virtual ? "Online" : event.venue || event.location || "Venue TBC")}</h4>
+      ${cost}
+      <button class="btn btn-gold btn-block" id="register-btn" type="button">Register on organiser's site</button>
       ${saveButtonHtml(event)}
     </div>
   `;
 }
 
 function saveButtonHtml(event) {
-  if (!currentUser || !isStudent(currentUser)) return "";
+  if (!currentUser) return "";
   return `
     <button class="btn btn-secondary btn-block" id="save-btn" style="margin-top:10px;">
       ${event.is_saved ? "★ Saved" : "☆ Save for later"}
@@ -177,30 +143,7 @@ function renderEvent(event) {
 }
 
 async function handleRegister(event) {
-  try {
-    if (event.is_registered) {
-      const registrationId = await findActiveRegistrationId(event.id);
-      if (!registrationId) {
-        toast.error("Could not find that registration.");
-        return;
-      }
-      await api.post(`/registrations/${registrationId}/cancel/`);
-      toast.success("Registration cancelled.");
-    } else {
-      await api.post("/registrations/", { event_id: event.id });
-      toast.success("You're registered! Check your email for confirmation.");
-    }
-    await loadEvent();
-  } catch (err) {
-    toast.error(err instanceof ApiError ? err.message : "Something went wrong.");
-  }
-}
-
-/** The cancel endpoint is keyed by registration id, which the event payload doesn't carry. */
-async function findActiveRegistrationId(eventId) {
-  const data = await api.get("/users/me/registrations/?status=registered");
-  const match = (data.results || []).find((registration) => registration.event?.id === eventId);
-  return match?.id || null;
+  await openRegistration(event);
 }
 
 async function handleSave(event) {

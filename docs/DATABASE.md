@@ -49,7 +49,7 @@ media columns hold Supabase Storage URLs rather than binary data.
 | `name` | varchar(150) | No | Display name |
 | `password` | varchar | No | Django hash from `AbstractBaseUser` |
 | `avatar_url` | text | Yes | Supabase Storage URL |
-| `role` | varchar(32) | No | `student`, `institution_staff`, `admin`, `super_admin` |
+| `role` | varchar(32) | No | `student`, `institution_staff`, `admin`, `super_admin`, `agent` |
 | `institution_affiliation` | varchar(200) | Yes | Free-text school/org the user typed; not a foreign key |
 | `institution_id` | UUID FK → `institutions` | Yes | Staff/event scoping only; `ON DELETE SET NULL` |
 | `is_active` | boolean | No | Suspension state |
@@ -97,6 +97,10 @@ Kept as rows, not hard-coded event fields, so the taxonomy can evolve.
 | `id` | UUID | No | Primary key |
 | `name` | varchar(100) | No | Sports, Math, English, … |
 | `slug` | varchar(120) | No | Unique |
+| `section_id` | UUID FK → `sections` | Yes | `ON DELETE PROTECT` |
+| `icon_url` | text | Yes | |
+| `sort_order` | integer | No | |
+| `is_active` | boolean | No | |
 
 ### `events` — `apps.events.models.Event`
 
@@ -115,11 +119,20 @@ Kept as rows, not hard-coded event fields, so the taxonomy can evolve.
 | `longitude` | numeric(9,6) | Yes | ±180 when present |
 | `school_level_id` | UUID FK → `school_levels` | Yes | `ON DELETE SET NULL` |
 | `cover_image_url` | text | Yes | Supabase Storage URL |
-| `registration_link` | varchar(500) | Yes | External registration URL |
+| `registration_link` | varchar(500) | Yes | External `https://` URL. Required before an event is published |
+| `format` | varchar(16) | No | `in_person`, `online`, `hybrid` |
+| `country` | varchar(100) | No | Default `Kenya` |
+| `is_free` | boolean | No | Default `true` |
+| `cost_note` | varchar(120) | Yes | |
+| `source` | varchar(32) | No | `admin`, `institution_staff`, or `agent` |
+| `source_url` | text | Yes | Page the agent read |
+| `external_mentions` | integer | No | Extra popularity weight |
+| `popularity_score` | float | No | Recomputed by `compute_popularity` |
+| `link_check_failures` | smallint | No | Consecutive failed link checks |
 | `is_verified` | boolean | No | Admin verification state |
 | `verified_by` | UUID FK → `users` | Yes | `ON DELETE SET NULL` |
 | `verified_at` | timestamptz | Yes | |
-| `is_virtual` | boolean | No | |
+| `is_virtual` | boolean | No | Kept in sync with `format = online` |
 | `created_by` | UUID FK → `users` | No | `ON DELETE PROTECT` — history is never orphaned |
 | `created_at` / `updated_at` | timestamptz | No | |
 
@@ -168,6 +181,60 @@ re-registering reactivates the existing row and history is preserved.
 | `school_level_id` | UUID FK → `school_levels` | Yes | `ON DELETE SET NULL` |
 | `email_notifications` | boolean | No | Default `true` |
 | `push_notifications` | boolean | No | Default `false` |
+| `formats` | jsonb | No | `in_person`, `online`, `hybrid` |
+| `country` | varchar(100) | No | Default `Kenya` |
+| `city` | varchar(100) | Yes | |
+| `latitude` / `longitude` | numeric | Yes | Rounded to two decimal places in the API |
+| `max_distance_km` | integer | Yes | `10`, `25`, `50`, `100`, or null |
+| `include_other_countries` | boolean | No | Default `false` |
+| `free_only` | boolean | No | Default `false` |
+| `days` | jsonb | No | `weekdays` and/or `weekends` |
+
+`user_preferences` also has a many-to-many to `sections`.
+
+### `sections` — `apps.events.models.Section`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID | No | Primary key |
+| `name` | varchar(100) | No | College Events, High School Events, College Application Resources |
+| `slug` | varchar(120) | No | Unique |
+| `description` | text | No | |
+| `sort_order` | integer | No | |
+| `is_active` | boolean | No | |
+
+### `event_interactions` — `apps.events.models.EventInteraction`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID | No | Primary key |
+| `event_id` | UUID FK → `events` | No | `ON DELETE CASCADE` |
+| `user_id` | UUID FK → `users` | Yes | `ON DELETE SET NULL` |
+| `ip_address` | inet | Yes | Used to dedupe anonymous views |
+| `kind` | varchar(16) | No | `view` or `click_out` |
+| `created_at` | timestamptz | No | |
+
+### `search_queries` — `apps.events.models.SearchQuery`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | UUID | No | Primary key |
+| `query` | varchar(200) | No | Lowercased, trimmed |
+| `results_count` | integer | No | |
+| `user_id` | UUID FK → `users` | Yes | `ON DELETE SET NULL` |
+| `created_at` | timestamptz | No | |
+
+### `agent_sources`, `agent_proposals`, `agent_runs`
+
+The ingestion job reads `agent_sources`, writes `agent_proposals`
+(`pending` / `approved` / `rejected` / `expired`, JSON `payload`), and records each run in
+`agent_runs` (`status`, `stats`, `errors`). Approving a proposal creates an
+unverified event owned by the `agent` user.
+
+### `request_metrics` and `newsletter_subscribers`
+
+`request_metrics` stores method, path, status, and duration for `/api/`
+requests. `newsletter_subscribers.email` is unique.
 
 ### `user_preference_categories` — `apps.preferences.models.UserPreferenceCategory`
 

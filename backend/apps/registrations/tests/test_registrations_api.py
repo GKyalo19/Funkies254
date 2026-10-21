@@ -18,29 +18,29 @@ CREATE_URL = "/api/registrations/"
 MY_LIST_URL = "/api/users/me/registrations/"
 
 
-def test_student_registers_for_event(api, student, event, login):
+def test_on_site_registration_is_gone(api, student, event, login):
     login(student)
     response = api.post(CREATE_URL, {"event_id": str(event.id)}, format="json")
 
-    assert response.status_code == 201, response.data
-    assert response.data["status"] == RegistrationStatus.REGISTERED
-    assert EventRegistration.objects.filter(user=student, event=event).count() == 1
+    assert response.status_code == 410
+    assert response.data["registration_link"] == "https://events.example.com/register"
+    assert EventRegistration.objects.filter(user=student, event=event).count() == 0
 
 
 def test_student_can_register_by_slug(api, student, event, login):
     login(student)
     response = api.post(CREATE_URL, {"event_slug": event.slug}, format="json")
 
-    assert response.status_code == 201, response.data
+    assert response.status_code == 410
 
 
 def test_duplicate_registration_is_rejected(api, student, event, login):
     login(student)
-    api.post(CREATE_URL, {"event_id": str(event.id)}, format="json")
+    EventRegistration.objects.create(user=student, event=event)
 
     response = api.post(CREATE_URL, {"event_id": str(event.id)}, format="json")
 
-    assert response.status_code == 409
+    assert response.status_code == 410
     assert EventRegistration.objects.filter(user=student, event=event).count() == 1
 
 
@@ -69,7 +69,7 @@ def test_cannot_register_for_unverified_event(api, student, event, login):
 
     response = api.post(CREATE_URL, {"event_id": str(event.id)}, format="json")
 
-    assert response.status_code == 400
+    assert response.status_code == 410
 
 
 def test_cannot_register_for_finished_event(api, student, staff, login):
@@ -85,31 +85,29 @@ def test_cannot_register_for_finished_event(api, student, staff, login):
 
     response = api.post(CREATE_URL, {"event_id": str(finished.id)}, format="json")
 
-    assert response.status_code == 400
-    assert "ended" in response.data["detail"].lower()
+    assert response.status_code == 410
 
 
 def test_anonymous_cannot_register(api, event):
-    assert api.post(CREATE_URL, {"event_id": str(event.id)}, format="json").status_code in (401, 403)
+    assert api.post(CREATE_URL, {"event_id": str(event.id)}, format="json").status_code == 410
 
 
 def test_staff_cannot_register(api, staff, event, login):
     login(staff)
-    assert api.post(CREATE_URL, {"event_id": str(event.id)}, format="json").status_code == 403
+    assert api.post(CREATE_URL, {"event_id": str(event.id)}, format="json").status_code == 410
 
 
 def test_registration_requires_an_event_reference(api, student, login):
     login(student)
     response = api.post(CREATE_URL, {}, format="json")
 
-    assert response.status_code == 400
-    assert "event_id" in response.data["errors"]
+    assert response.status_code == 410
 
 
 def test_my_registration_list_returns_only_own_rows(api, student, other_student, event, login):
     EventRegistration.objects.create(user=other_student, event=event)
+    EventRegistration.objects.create(user=student, event=event)
     login(student)
-    api.post(CREATE_URL, {"event_id": str(event.id)}, format="json")
 
     response = api.get(MY_LIST_URL)
 
@@ -119,9 +117,9 @@ def test_my_registration_list_returns_only_own_rows(api, student, other_student,
 
 
 def test_student_cancels_own_registration(api, student, event, login):
+    created = EventRegistration.objects.create(user=student, event=event)
+    registration_id = created.id
     login(student)
-    created = api.post(CREATE_URL, {"event_id": str(event.id)}, format="json")
-    registration_id = created.data["id"]
 
     response = api.post(f"{CREATE_URL}{registration_id}/cancel/", format="json")
 
@@ -130,8 +128,8 @@ def test_student_cancels_own_registration(api, student, event, login):
 
 
 def test_cancelling_twice_conflicts(api, student, event, login):
+    registration_id = EventRegistration.objects.create(user=student, event=event).id
     login(student)
-    registration_id = api.post(CREATE_URL, {"event_id": str(event.id)}, format="json").data["id"]
     api.post(f"{CREATE_URL}{registration_id}/cancel/", format="json")
 
     response = api.post(f"{CREATE_URL}{registration_id}/cancel/", format="json")
@@ -181,8 +179,8 @@ def test_other_staff_cannot_mark_attendance(api, other_staff, student, event, lo
 
 
 def test_registration_count_and_flag_in_event_payload(api, student, event, login):
+    EventRegistration.objects.create(user=student, event=event)
     login(student)
-    api.post(CREATE_URL, {"event_id": str(event.id)}, format="json")
 
     response = api.get(f"/api/events/{event.slug}/")
 

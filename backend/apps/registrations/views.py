@@ -2,7 +2,7 @@
 
 from rest_framework import generics, status
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -27,23 +27,38 @@ def _registration_queryset():
 
 
 class RegistrationCreateView(APIView):
-    """POST /api/registrations/ — students register for a visible, open event."""
+    """On-site registration is closed. Visitors register on the organiser's site (EVT-3)."""
 
-    permission_classes = (IsStudent,)
+    permission_classes = (AllowAny,)
 
     def post(self, request):
-        serializer = RegistrationCreateSerializer(
-            data=request.data, context={"request": request}
-        )
-        serializer.is_valid(raise_exception=True)
+        link = None
+        event_id = request.data.get("event_id") if isinstance(request.data, dict) else None
+        event_slug = request.data.get("event_slug") if isinstance(request.data, dict) else None
+        if event_id or event_slug:
+            from django.core.exceptions import ValidationError
 
-        registration, created = register_for_event(
-            user=request.user, event=serializer.validated_data["event"]
-        )
-        registration = _registration_queryset().get(pk=registration.pk)
+            from apps.events.models import Event
+
+            event = None
+            try:
+                if event_id:
+                    event = Event.objects.filter(pk=event_id).first()
+                elif event_slug:
+                    event = Event.objects.filter(slug=event_slug).first()
+            except (ValidationError, ValueError):
+                event = None
+            if event is not None:
+                link = event.registration_link
         return Response(
-            EventRegistrationSerializer(registration, context={"request": request}).data,
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            {
+                "detail": (
+                    "On-site registration has closed. Use the organiser's registration link."
+                ),
+                "code": "registration_external",
+                "registration_link": link,
+            },
+            status=status.HTTP_410_GONE,
         )
 
 

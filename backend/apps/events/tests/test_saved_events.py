@@ -64,9 +64,9 @@ def test_anonymous_cannot_save(api, event):
     assert api.post(save_url(event), format="json").status_code in (401, 403)
 
 
-def test_staff_cannot_save_events(api, staff, event, login):
+def test_staff_can_save_events(api, staff, event, login):
     login(staff)
-    assert api.post(save_url(event), format="json").status_code == 403
+    assert api.post(save_url(event), format="json").status_code == 201
 
 
 def test_saved_event_list_returns_only_own_saves(api, student, other_student, event, login):

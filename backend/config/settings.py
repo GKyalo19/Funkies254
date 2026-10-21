@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.registrations",
     "apps.preferences",
     "apps.recommendations",
+    "apps.agent",
 ]
 
 MIDDLEWARE = [
@@ -55,6 +56,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "apps.common.middleware.RequestMetricsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

@@ -8,8 +8,8 @@ constraints.
 
 from rest_framework import serializers
 
-from apps.common.enums import UserRole
-from apps.events.models import Category, Event, SavedEvent, SchoolLevel
+from apps.common.enums import EventFormat, UserRole
+from apps.events.models import Category, Event, SavedEvent, SchoolLevel, Section
 from apps.organizers.models import Institution
 from apps.organizers.serializers import InstitutionBriefSerializer
 from apps.users.serializers import UserBriefSerializer
@@ -22,11 +22,35 @@ class SchoolLevelSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class SectionBriefSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Section
+        fields = ("id", "name", "slug", "description", "sort_order")
+        read_only_fields = fields
+
+
 class CategorySerializer(serializers.ModelSerializer):
+    section = serializers.SlugRelatedField(slug_field="slug", read_only=True)
+
     class Meta:
         model = Category
-        fields = ("id", "name", "slug")
+        fields = ("id", "name", "slug", "section", "icon_url", "sort_order")
         read_only_fields = fields
+
+
+class SectionSerializer(serializers.ModelSerializer):
+    categories = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Section
+        fields = ("id", "name", "slug", "description", "sort_order", "categories")
+        read_only_fields = fields
+
+    def get_categories(self, obj):
+        categories = getattr(obj, "active_categories", None)
+        if categories is None:
+            categories = obj.categories.filter(is_active=True).order_by("sort_order", "name")
+        return CategorySerializer(categories, many=True).data
 
 
 class EventSerializer(serializers.ModelSerializer):
@@ -40,6 +64,9 @@ class EventSerializer(serializers.ModelSerializer):
     is_saved = serializers.SerializerMethodField()
     is_registered = serializers.SerializerMethodField()
     registration_count = serializers.SerializerMethodField()
+    is_past = serializers.SerializerMethodField()
+    is_virtual = serializers.SerializerMethodField()
+    sections = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
@@ -59,10 +86,18 @@ class EventSerializer(serializers.ModelSerializer):
             "categories",
             "cover_image_url",
             "registration_link",
+            "format",
+            "country",
+            "is_free",
+            "cost_note",
+            "source",
+            "popularity_score",
             "is_verified",
             "verified_by",
             "verified_at",
             "is_virtual",
+            "is_past",
+            "sections",
             "created_by",
             "is_saved",
             "is_registered",
@@ -76,6 +111,23 @@ class EventSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         user = getattr(request, "user", None)
         return user if (user and user.is_authenticated) else None
+
+    def get_is_virtual(self, obj):
+        return obj.format == EventFormat.ONLINE
+
+    def get_is_past(self, obj):
+        return obj.is_past
+
+    def get_sections(self, obj):
+        seen = []
+        slugs = set()
+        for category in obj.categories.all():
+            section = getattr(category, "section", None)
+            if section is None or section.slug in slugs:
+                continue
+            slugs.add(section.slug)
+            seen.append(SectionBriefSerializer(section).data)
+        return seen
 
     def get_is_saved(self, obj):
         user = self._user()
@@ -147,6 +199,10 @@ class EventWriteSerializer(serializers.ModelSerializer):
             "cover_image",
             "cover_image_url",
             "registration_link",
+            "format",
+            "country",
+            "is_free",
+            "cost_note",
             "is_virtual",
         )
 
@@ -170,22 +226,42 @@ class EventWriteSerializer(serializers.ModelSerializer):
                 {"end_time": "End time must be after the start time."}
             )
 
-        is_virtual = attrs.get("is_virtual", getattr(instance, "is_virtual", False))
-        if is_virtual:
-            contradictory = {
-                field: "A virtual event cannot have physical location data."
-                for field in ("venue", "latitude", "longitude")
-                if attrs.get(field) is not None
-            }
-            if contradictory:
-                raise serializers.ValidationError(contradictory)
-            if not (
-                attrs.get("registration_link")
-                or getattr(instance, "registration_link", None)
-            ):
-                raise serializers.ValidationError(
-                    {"registration_link": "A virtual event needs a registration or joining link."}
+        if attrs.get("is_virtual") is True and "format" not in attrs:
+            attrs["format"] = EventFormat.ONLINE
+        elif attrs.get("is_virtual") is False and "format" not in attrs and instance is None:
+            attrs["format"] = EventFormat.IN_PERSON
+
+        event_format = attrs.get("format", getattr(instance, "format", EventFormat.IN_PERSON))
+        link = attrs.get(
+            "registration_link", getattr(instance, "registration_link", None) if instance else None
+        )
+        errors = {}
+        if link and not str(link).startswith("https://"):
+            errors["registration_link"] = "Registration link must start with https://."
+
+        if event_format == EventFormat.ONLINE:
+            for field in ("venue", "latitude", "longitude"):
+                if attrs.get(field) is not None:
+                    errors[field] = "An online event cannot have physical location data."
+            if not link:
+                errors["registration_link"] = (
+                    "An online event needs a registration or joining link."
                 )
+
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        publishing = (
+            user is not None
+            and getattr(user, "is_authenticated", False)
+            and getattr(user, "is_platform_admin", False)
+            and instance is None
+        )
+        if publishing and not (link and str(link).startswith("https://")):
+            errors["registration_link"] = (
+                "A published event needs an https:// registration link."
+            )
+        if errors:
+            raise serializers.ValidationError(errors)
 
         self._validate_institution_ownership(attrs)
         return attrs

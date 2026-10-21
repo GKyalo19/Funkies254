@@ -10,11 +10,24 @@ function getContainer() {
   return container;
 }
 
-function showToast(message, type = "success", duration = 4500) {
+function showToast(message, type = "success", duration = 4500, action = null) {
   const container = getContainer();
   const toast = document.createElement("div");
   toast.className = `toast toast-${type}`;
-  toast.textContent = message;
+  const text = document.createElement("span");
+  text.textContent = message;
+  toast.appendChild(text);
+  if (action) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-action";
+    button.textContent = action.label;
+    button.addEventListener("click", () => {
+      action.onClick();
+      toast.remove();
+    });
+    toast.appendChild(button);
+  }
   container.appendChild(toast);
 
   setTimeout(() => {
@@ -23,6 +36,7 @@ function showToast(message, type = "success", duration = 4500) {
 }
 
 export const toast = {
-  success: (message) => showToast(message, "success"),
+  success: (message, options = {}) =>
+    showToast(message, "success", options.duration ?? 4500, options.action || null),
   error: (message) => showToast(message, "error"),
 };

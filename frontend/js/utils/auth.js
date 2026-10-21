@@ -28,6 +28,17 @@ export async function requireAuth(redirectTo = "/pages/login.html") {
     window.location.href = redirectTo;
     return null;
   }
+  const onboarding = "/pages/profile.html?tab=preferences&onboarding=1";
+  const here = `${window.location.pathname}${window.location.search}`;
+  if (
+    user.role === "student" &&
+    user.has_preferences === false &&
+    !here.startsWith("/pages/profile.html") &&
+    !here.startsWith("/pages/verify-email.html")
+  ) {
+    window.location.href = onboarding;
+    return null;
+  }
   return user;
 }
 

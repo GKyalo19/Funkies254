@@ -98,8 +98,22 @@ def verify_email_code(*, email: str, code: str) -> User:
     return user
 
 
-def register_user(*, email, name, password, institution_affiliation=None, role=UserRole.STUDENT):
+def _section_slug_for_level(school_level):
+    if school_level is None:
+        return None
+    slug = getattr(school_level, "slug", "")
+    if slug in ("junior-secondary", "senior-secondary"):
+        return "high-school-events"
+    if slug == "college":
+        return "college-events"
+    return None
+
+
+def register_user(
+    *, email, name, password, institution_affiliation=None, role=UserRole.STUDENT, school_level=None
+):
     """Create an account together with its single preference record (§8.1)."""
+    from apps.events.models import Section
     from apps.preferences.models import UserPreference
 
     affiliation = (institution_affiliation or "").strip() or None
@@ -114,10 +128,51 @@ def register_user(*, email, name, password, institution_affiliation=None, role=U
             institution_affiliation=affiliation,
             email_verified=False,
         )
-        UserPreference.objects.create(user=user)
+        preference = UserPreference.objects.create(user=user, school_level=school_level)
+        section_slug = _section_slug_for_level(school_level)
+        if section_slug:
+            section = Section.objects.filter(slug=section_slug, is_active=True).first()
+            if section is not None:
+                preference.sections.add(section)
 
     issue_and_send_verification_code(user, force=True)
     return user
+
+
+def change_password(*, user, current_password, new_password):
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    if not user.check_password(current_password):
+        raise BusinessRuleError("Current password is incorrect.", code="invalid_password")
+    try:
+        validate_password(new_password, user)
+    except DjangoValidationError as exc:
+        raise BusinessRuleError(" ".join(exc.messages), code="invalid_password") from exc
+    user.set_password(new_password)
+    user.save(update_fields=["password"])
+    return user
+
+
+@transaction.atomic
+def delete_own_account(*, user, password):
+    from django.db.models import ProtectedError
+
+    if not user.check_password(password):
+        raise BusinessRuleError("Password is incorrect.", code="invalid_password")
+    log_action(actor=user, action=AuditAction.DELETED_ACCOUNT, instance=user)
+    user_id = user.pk
+    try:
+        user.delete()
+    except ProtectedError:
+        user.email = f"deleted-{user_id}@users.funkies254.invalid"
+        user.name = "Deleted user"
+        user.is_active = False
+        user.avatar_url = None
+        user.institution_affiliation = None
+        user.set_unusable_password()
+        user.save()
+    return user_id
 
 
 @transaction.atomic

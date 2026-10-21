@@ -33,6 +33,7 @@ class UserSerializer(serializers.ModelSerializer):
         write_only=True, required=False, allow_null=True
     )
     avatar = serializers.ImageField(write_only=True, required=False)
+    has_preferences = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -49,6 +50,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_active",
             "is_staff",
             "email_verified",
+            "has_preferences",
             "created_at",
             "updated_at",
         )
@@ -63,6 +65,12 @@ class UserSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+    def get_has_preferences(self, obj):
+        preference = getattr(obj, "preference", None)
+        if preference is None:
+            return False
+        return preference.preferred_categories.exists() or preference.sections.exists()
 
     def get_institution(self, obj):
         if not obj.institution_id:
@@ -131,6 +139,7 @@ class RegisterSerializer(serializers.Serializer):
     institution_affiliation = serializers.CharField(
         max_length=200, required=False, allow_blank=True, allow_null=True
     )
+    school_level_id = serializers.UUIDField(required=False, allow_null=True)
 
     def validate_email(self, value):
         normalized = UserManager.normalize_login_email(value)
@@ -154,12 +163,24 @@ class RegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError(list(exc.messages)) from exc
         return value
 
+    def validate_school_level_id(self, value):
+        if value is None:
+            return None
+        from apps.common.enums import SchoolLevelSlug
+        from apps.events.models import SchoolLevel
+
+        level = SchoolLevel.objects.filter(pk=value).first()
+        if level is None or level.slug == SchoolLevelSlug.PRIMARY:
+            raise serializers.ValidationError("Choose junior secondary, senior secondary, or college.")
+        return level
+
     def create(self, validated_data):
         return register_user(
             email=validated_data["email"],
             name=validated_data["name"],
             password=validated_data["password"],
             institution_affiliation=validated_data.get("institution_affiliation"),
+            school_level=validated_data.get("school_level_id"),
         )
 
 
@@ -181,6 +202,11 @@ class LoginSerializer(serializers.Serializer):
                     code="account_suspended",
                 )
             raise AuthenticationError("Invalid email or password.", code="invalid_credentials")
+
+        if user.role == UserRole.AGENT:
+            raise AuthenticationError(
+                "This account cannot sign in.", code="agent_account"
+            )
 
         if not user.email_verified:
             raise EmailNotVerifiedError()

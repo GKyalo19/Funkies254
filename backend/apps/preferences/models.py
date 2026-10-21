@@ -3,7 +3,16 @@
 from django.conf import settings
 from django.db import models
 
+from apps.common.enums import EventFormat
 from apps.common.models import UUIDPrimaryKeyModel
+
+
+def default_formats():
+    return [choice.value for choice in EventFormat]
+
+
+def default_days():
+    return ["weekdays", "weekends"]
 
 
 class UserPreference(UUIDPrimaryKeyModel):
@@ -23,6 +32,20 @@ class UserPreference(UUIDPrimaryKeyModel):
     )
     email_notifications = models.BooleanField(default=True)
     push_notifications = models.BooleanField(default=False)
+    sections = models.ManyToManyField(
+        "events.Section",
+        related_name="user_preferences",
+        blank=True,
+    )
+    formats = models.JSONField(default=default_formats)
+    country = models.CharField(max_length=100, default="Kenya")
+    city = models.CharField(max_length=100, null=True, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    max_distance_km = models.PositiveIntegerField(null=True, blank=True)
+    include_other_countries = models.BooleanField(default=False)
+    free_only = models.BooleanField(default=False)
+    days = models.JSONField(default=default_days)
     preferred_categories = models.ManyToManyField(
         "events.Category",
         through="UserPreferenceCategory",

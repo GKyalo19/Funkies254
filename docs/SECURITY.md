@@ -31,7 +31,7 @@ Supabase Storage directly, and no Supabase credential ever reaches the browser.
 | `SameSite` | `Lax` | `None` |
 | CSRF enforcement | off (`JWT_COOKIE_CSRF_ENFORCED=False`) | on |
 
-Netlify and Render are different sites, so production cookies must be
+Vercel and Render are different sites, so production cookies must be
 `SameSite=None; Secure` for the browser to send them at all. `SameSite=None`
 without `Secure` is rejected by browsers — the two settings move together.
 
@@ -61,8 +61,9 @@ cookie authentication vulnerable to cross-site request forgery. So:
   no wildcard, because `CORS_ALLOW_CREDENTIALS = True` and wildcards are
   incompatible with credentialed requests.
 - `CSRF_TRUSTED_ORIGINS` defaults to the same list.
-- Add the exact Netlify origin (scheme + host, no trailing slash) before
-  deploying the frontend.
+- The allowlist is `https://www.funkies254.com`, `https://funkies254.com`, and
+  `https://funkies254.vercel.app`. Add any new origin (scheme + host, no
+  trailing slash) before that frontend can call the API with cookies.
 
 ## 5. Authorization
 
@@ -127,7 +128,8 @@ Suspended accounts are told so deliberately, because that is actionable.
 - [ ] `DEBUG=False`
 - [ ] Fresh `SECRET_KEY`, set only in the Render dashboard
 - [ ] `ALLOWED_HOSTS` contains the Render host
-- [ ] `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` contain the Netlify origin
+- [ ] `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` contain `https://www.funkies254.com`, `https://funkies254.com`, and `https://funkies254.vercel.app`
+- [ ] `FRONTEND_BASE_URL` is `https://www.funkies254.com`
 - [ ] `JWT_COOKIE_SECURE=True`, `JWT_COOKIE_SAMESITE=None`
 - [ ] `JWT_COOKIE_CSRF_ENFORCED=True`
 - [ ] `DB_SSL_REQUIRE=True`

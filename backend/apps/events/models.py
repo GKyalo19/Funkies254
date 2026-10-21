@@ -9,7 +9,25 @@ from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
 
+from apps.common.enums import EventFormat, EventSource, InteractionKind
 from apps.common.models import TimeStampedModel, UUIDPrimaryKeyModel
+
+
+class Section(UUIDPrimaryKeyModel):
+    """Top-level browse section. Categories hang under a section (CAT-1)."""
+
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=120, unique=True)
+    description = models.TextField(blank=True, default="")
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "sections"
+        ordering = ("sort_order", "name")
+
+    def __str__(self):
+        return self.name
 
 
 class SchoolLevel(UUIDPrimaryKeyModel):
@@ -27,11 +45,22 @@ class SchoolLevel(UUIDPrimaryKeyModel):
 class Category(UUIDPrimaryKeyModel):
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=120, unique=True)
+    section = models.ForeignKey(
+        Section,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="categories",
+        db_column="section_id",
+    )
+    icon_url = models.TextField(null=True, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         db_table = "categories"
         verbose_name_plural = "categories"
-        ordering = ("name",)
+        ordering = ("sort_order", "name")
 
     def __str__(self):
         return self.name
@@ -44,9 +73,9 @@ class Category(UUIDPrimaryKeyModel):
 
 class EventQuerySet(models.QuerySet):
     def with_related(self):
-        return self.select_related("institution", "school_level", "created_by").prefetch_related(
-            "categories"
-        )
+        return self.select_related(
+            "institution", "school_level", "created_by"
+        ).prefetch_related("categories", "categories__section")
 
     def verified(self):
         return self.filter(is_verified=True)
@@ -122,6 +151,19 @@ class Event(UUIDPrimaryKeyModel, TimeStampedModel):
         null=True, blank=True, help_text="Supabase Storage URL for the cover image."
     )
     registration_link = models.URLField(max_length=500, null=True, blank=True)
+    format = models.CharField(
+        max_length=16, choices=EventFormat.choices, default=EventFormat.IN_PERSON
+    )
+    country = models.CharField(max_length=100, default="Kenya")
+    is_free = models.BooleanField(default=True)
+    cost_note = models.CharField(max_length=120, null=True, blank=True)
+    source = models.CharField(
+        max_length=32, choices=EventSource.choices, default=EventSource.ADMIN
+    )
+    source_url = models.TextField(null=True, blank=True)
+    external_mentions = models.PositiveIntegerField(default=0)
+    popularity_score = models.FloatField(default=0)
+    link_check_failures = models.PositiveSmallIntegerField(default=0)
     is_verified = models.BooleanField(default=False)
     verified_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -151,6 +193,9 @@ class Event(UUIDPrimaryKeyModel, TimeStampedModel):
             models.Index(fields=["is_verified"], name="events_is_verified_idx"),
             models.Index(fields=["institution"], name="events_institution_idx"),
             models.Index(fields=["school_level"], name="events_school_level_idx"),
+            models.Index(fields=["-popularity_score"], name="events_popularity_idx"),
+            models.Index(fields=["format"], name="events_format_idx"),
+            models.Index(fields=["country"], name="events_country_idx"),
         ]
         constraints = [
             models.CheckConstraint(
@@ -175,7 +220,17 @@ class Event(UUIDPrimaryKeyModel, TimeStampedModel):
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = self.generate_unique_slug(self.title)
+        # format replaces is_virtual. Keep the boolean column in step for one release.
+        if self.is_virtual and self.format == EventFormat.IN_PERSON:
+            self.format = EventFormat.ONLINE
+        self.is_virtual = self.format == EventFormat.ONLINE
         super().save(*args, **kwargs)
+
+    @property
+    def is_past(self) -> bool:
+        from django.utils import timezone
+
+        return self.end_time < timezone.now()
 
     @classmethod
     def generate_unique_slug(cls, value: str) -> str:
@@ -245,3 +300,61 @@ class SavedEvent(UUIDPrimaryKeyModel):
 
     def __str__(self):
         return f"{self.user_id} saved {self.event_id}"
+
+
+class EventInteraction(UUIDPrimaryKeyModel):
+    """A view or an outbound registration click (EVT-2). Feeds popularity."""
+
+    event = models.ForeignKey(
+        Event, on_delete=models.CASCADE, related_name="interactions", db_column="event_id"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="event_interactions",
+        db_column="user_id",
+    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    kind = models.CharField(max_length=16, choices=InteractionKind.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "event_interactions"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(
+                fields=["event", "kind", "created_at"], name="event_interaction_kind_idx"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.kind} {self.event_id}"
+
+
+class SearchQuery(UUIDPrimaryKeyModel):
+    """One row per event search. Feeds the agent and the daily report (EVT-6)."""
+
+    query = models.CharField(max_length=200)
+    results_count = models.PositiveIntegerField(default=0)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="search_queries",
+        db_column="user_id",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "search_queries"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["created_at"], name="search_query_created_idx"),
+            models.Index(fields=["query"], name="search_query_text_idx"),
+        ]
+
+    def __str__(self):
+        return self.query

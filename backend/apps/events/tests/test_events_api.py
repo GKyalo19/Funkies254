@@ -71,7 +71,11 @@ def test_staff_creates_event_with_categories_and_audit_record(
 
 def test_admin_created_event_is_verified_immediately(api, admin_user, event_payload, login):
     login(admin_user)
-    response = api.post(LIST_URL, event_payload, format="json")
+    response = api.post(
+        LIST_URL,
+        {**event_payload, "registration_link": "https://events.example.com/register"},
+        format="json",
+    )
 
     assert response.status_code == 201, response.data
     assert response.data["is_verified"] is True
@@ -112,7 +116,13 @@ def test_virtual_event_rejects_physical_venue(api, staff, event_payload, login):
 
 def test_virtual_event_requires_registration_link(api, staff, event_payload, login):
     login(staff)
-    payload = {**event_payload, "is_virtual": True, "venue": None, "latitude": None}
+    payload = {
+        **event_payload,
+        "is_virtual": True,
+        "venue": None,
+        "latitude": None,
+        "registration_link": "",
+    }
 
     response = api.post(LIST_URL, payload, format="json")
 
@@ -217,7 +227,9 @@ def test_student_cannot_delete_event(api, student, event, login):
 
 
 def test_admin_verifies_event(api, admin_user, staff, event, login):
-    Event.objects.filter(pk=event.pk).update(is_verified=False)
+    Event.objects.filter(pk=event.pk).update(
+        is_verified=False, registration_link="https://events.example.com/register"
+    )
     login(admin_user)
 
     response = api.post(f"{LIST_URL}{event.id}/verify/", format="json")
@@ -253,7 +265,8 @@ def test_filter_upcoming_excludes_finished_events(api, event, staff):
     )
 
     assert api.get(f"{LIST_URL}?upcoming=true").data["count"] == 1
-    assert api.get(LIST_URL).data["count"] == 2
+    assert api.get(LIST_URL).data["count"] == 1
+    assert api.get(f"{LIST_URL}?upcoming=false").data["count"] == 1
 
 
 def test_event_owner_lists_registrations(api, staff, student, event, login):

@@ -29,7 +29,7 @@ form.addEventListener("submit", async (event) => {
     });
     clearCurrentUserCache();
     toast.success("Email verified. Welcome!");
-    window.location.href = "/pages/preferences.html";
+    window.location.href = "/pages/profile.html?tab=preferences&onboarding=1";
   } catch (err) {
     if (err instanceof ApiError) {
       applyFieldErrors(form, err.fields);

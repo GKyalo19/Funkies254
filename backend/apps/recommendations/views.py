@@ -13,7 +13,7 @@ class RecommendationFeedView(APIView):
     """
     GET /api/recommendations/feed/
 
-    Works for anonymous visitors (soonest upcoming events) and for signed-in
+    Works for anonymous visitors (most popular, then soonest) and for signed-in
     students (preference-weighted, with the matching rules returned alongside
     each event so the UI can explain itself).
     """

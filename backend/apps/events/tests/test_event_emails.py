@@ -10,24 +10,19 @@ from apps.preferences.models import UserPreferenceCategory
 pytestmark = pytest.mark.django_db
 
 
-def test_registering_for_an_event_sends_confirmation(api, student, event, login):
+def test_on_site_registration_does_not_send_confirmation(api, student, event, login):
     login(student)
     response = api.post("/api/registrations/", {"event_id": str(event.id)}, format="json")
 
-    assert response.status_code == 201, response.data
-    assert len(mail.outbox) == 1
-    assert student.email in mail.outbox[0].to
-    assert event.title in mail.outbox[0].subject
+    assert response.status_code == 410
+    assert mail.outbox == []
 
 
 def test_duplicate_registration_does_not_send_another_email(api, student, event, login):
     login(student)
-    api.post("/api/registrations/", {"event_id": str(event.id)}, format="json")
-    mail.outbox.clear()
-
     response = api.post("/api/registrations/", {"event_id": str(event.id)}, format="json")
 
-    assert response.status_code == 409
+    assert response.status_code == 410
     assert mail.outbox == []
 
 

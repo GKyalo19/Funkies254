@@ -24,7 +24,9 @@
   --color-input-text: rgba(0, 0, 0, 0.66);
   --color-chip-bg: #d9d9d9;
   --color-pill-ghost: rgba(217, 217, 217, 0.31);
-  --color-navbar: rgba(0, 0, 0, 0.86);
+  --header-bg: rgba(0, 0, 0, 0.7);
+  --color-navbar: var(--header-bg);
+  --color-accent-blue: #3d7eff;
   --color-footer-overlay: rgba(0, 0, 0, 0.51);
 
   /* Accents */

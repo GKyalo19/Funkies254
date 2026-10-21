@@ -27,10 +27,11 @@ def api():
 
 @pytest.fixture
 def categories(db):
-    return {
-        slug: Category.objects.create(name=name, slug=slug)
-        for name, slug in (("Sports", "sports"), ("Math", "math"), ("Chess", "chess"))
-    }
+    created = {}
+    for name, slug in (("Sports", "sports"), ("Math", "math"), ("Chess", "chess")):
+        category, _ = Category.objects.get_or_create(slug=slug, defaults={"name": name})
+        created[slug] = category
+    return created
 
 
 @pytest.fixture
@@ -121,6 +122,7 @@ def event(db, institution, staff, school_levels, categories):
         venue="Main Hall",
         location="Ngara, Nairobi",
         school_level=school_levels[SchoolLevelSlug.SENIOR_SECONDARY.value],
+        registration_link="https://events.example.com/register",
         is_verified=True,
         created_by=staff,
     )
@@ -141,4 +143,5 @@ def event_payload(institution, school_levels, categories):
         "location": "Ngara, Nairobi",
         "school_level_id": str(school_levels[SchoolLevelSlug.SENIOR_SECONDARY.value].id),
         "category_ids": [str(categories["chess"].id)],
+        "registration_link": "https://events.example.com/register",
     }

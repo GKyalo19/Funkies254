@@ -169,4 +169,4 @@ otherwise every POST/PATCH/DELETE needs an `X-CSRFToken` header. Set it to
 
 Next: see `docs/API.md` for the full endpoint reference, `docs/DATABASE.md` for the
 schema, `docs/SECURITY.md` for the auth/cookie/storage rules, and
-`docs/DEPLOYMENT.md` for hosting for free on Netlify + Render.
+`docs/DEPLOYMENT.md` for hosting the API on Render and the site on Vercel.

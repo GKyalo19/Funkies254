@@ -174,7 +174,7 @@ in [`API.md`](API.md).
 ```
 frontend/
 ├── index.html                Home page (the only page not in pages/, so it's the site root)
-├── netlify.toml                Netlify deploy config (publish dir, SPA-style redirects)
+├── vercel.json                 Vercel headers for the static frontend
 │
 ├── pages/                     One .html file per route — pure markup + mount points,
 │   │                          no inline logic (that lives in the matching js/pages/*.js)
@@ -185,8 +185,11 @@ frontend/
 │   │                                 education level/fee) + pagination
 │   ├── event.html                    Single event detail — expects ?slug=<event-slug>
 │   ├── profile.html                   Tabbed account page: "My Profile" tab (this file)
-│   ├── preferences.html                Tabbed account page: "Preferences" tab
-│   ├── registrations.html               Tabbed account page: "My Registrations" tab
+│   ├── preferences.html                Redirects to the profile preferences tab
+│   ├── saved-events.html                Bookmarked events
+│   ├── about.html                       About the project
+│   ├── review-queue.html                Admin agent proposals
+│   ├── site-health.html                 Latest agent health report
 │   ├── event-form.html                   Staff/admin add or edit event (`?slug=` for edit)
 │   ├── events-dashboard.html             Staff "my events" / admin all-events board
 │   ├── event-participants.html           Registrations for one event (`?slug=`)
@@ -268,10 +271,12 @@ frontend/
 | `register.html` | `register.js` | `POST /auth/register/` |
 | `reset-password.html` | `reset-password.js` | `POST /auth/password-reset/`, `POST /auth/password-reset/confirm/` |
 | `event-listings.html` | `event-listings.js` | `GET /events/?category=&location=...` |
-| `event.html?slug=...` | `event.js` | `GET /events/{slug}/`, `POST /organizers/{slug}/follow/`, `POST /registrations/` |
-| `profile.html` | `profile.js` | `GET/PATCH /users/me/`, `POST /users/me/avatar/` |
-| `preferences.html` | `preferences.js` | `GET/PUT /preferences/me/` |
-| `registrations.html` | `registrations.js` | `GET /registrations/` |
+| `event.html?slug=...` | `event.js` | `GET /events/{slug}/`, `POST /events/{id}/click-out/`, `POST /events/{id}/save/` |
+| `profile.html` | `profile.js` | `GET/PATCH /users/me/`, `GET/PATCH /preferences/me/`, `POST /users/me/password/`, `POST /users/me/delete/` |
+| `saved-events.html` | `saved-events.js` | `GET /users/me/saved-events/` |
+| `about.html` | `about.js` | none |
+| `review-queue.html` | `review-queue.js` | `GET /agent/proposals/`, approve and reject |
+| `site-health.html` | `site-health.js` | `GET /admin/health-report/latest/` |
 | `event-form.html` (staff/admin) | `event-form.js` | `POST /events/`, `GET/PATCH /events/{slug}/` |
 | `events-dashboard.html` | `events-dashboard.js` | `GET /events/?mine=true`, `POST /events/{slug}/verify/` |
 | `event-participants.html` | `event-participants.js` | `GET /events/{id}/registrations/` |
@@ -287,7 +292,7 @@ frontend/
 | `ARCHITECTURE.md` | The *why*: tech stack rationale, request-flow walkthroughs, data model diagram, auth design, testing/deployment strategy, future growth path. |
 | `SETUP.md` | Step-by-step local dev setup (backend venv, frontend static server, Supabase configuration, common troubleshooting). |
 | `API.md` | Every REST endpoint: method, path, auth requirement, request/response JSON, `curl` examples. |
-| `DEPLOYMENT.md` | Deploying for free — backend to Render, frontend to Netlify. |
+| `DEPLOYMENT.md` | Deploying the API to Render and the site to Vercel. |
 
 ---
 

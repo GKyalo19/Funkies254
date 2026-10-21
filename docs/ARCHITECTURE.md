@@ -13,7 +13,7 @@ eventually outside — Kenya. This document explains **what** the system is made
 ┌─────────────────────┐        HTTPS + JSON        ┌──────────────────────┐
 │   Frontend (SPA-ish) │ ─────────────────────────▶ │   Backend REST API   │
 │  Vanilla HTML/CSS/JS │ ◀───────────────────────── │   Django + DRF       │
-│  Hosted on Netlify   │      httpOnly JWT cookies   │   Hosted on Render   │
+│  Hosted on Vercel    │      httpOnly JWT cookies   │   Hosted on Render   │
 └─────────────────────┘                              └──────────┬───────────┘
                                                                   │
                                                      SQL (psycopg2) + Storage REST API
@@ -49,7 +49,7 @@ other side, because they only ever communicate through the documented REST API (
 | Backend language/framework | Python + Django + Django REST Framework | Django's admin panel gives free content curation tooling from day one (mark events featured, moderate organizers) without building custom admin UI. Python has the richest ecosystem (pandas, scikit-learn) to grow the recommendation engine into real ML later, without a language rewrite. |
 | Auth | JWT in httpOnly cookies | Stateless (no server-side session store needed, which matters on a free-tier host that may restart/scale to zero), and httpOnly cookies can't be read by JavaScript, which protects tokens from XSS — a real concern in a vanilla-JS app with no framework sanitising output for you. |
 | Database | PostgreSQL via Supabase | Relational data (events ↔ categories ↔ organizers ↔ registrations ↔ users) is naturally modeled with foreign keys and joins. Supabase's free tier bundles Postgres *and* object storage (for images/videos) behind one dashboard, which is simpler to manage solo than juggling two separate services. |
-| Hosting | Netlify (frontend) + Render (backend) | Both have generous, genuinely free tiers with automatic HTTPS and git-based deploys — no credit card required to start. |
+| Hosting | Vercel (frontend) + Render (backend) | The public site is `https://www.funkies254.com` (and `https://funkies254.com`), with the API on Render. |
 
 ---
 
@@ -179,9 +179,9 @@ frontend/
 │   ├── reset-password.html
 │   ├── event-listings.html
 │   ├── event.html             # ?slug=<event-slug>
-│   ├── profile.html
-│   ├── preferences.html
-│   ├── registrations.html     # "My Registrations"
+│   ├── profile.html           # profile + preferences
+│   ├── saved-events.html
+│   ├── about.html
 │   └── event-form.html        # staff-only "Add Event"
 ├── css/
 │   ├── base.css                # design tokens (colours, spacing) + resets
@@ -225,11 +225,11 @@ a frontend-only change — the backend's REST API doesn't need to know or care.
    `renderHeader()`/`renderFooter()` (which themselves call `getCurrentUser()` to decide
    whether to show "Log in" or an avatar menu), then calls
    `GET /api/events/{slug}/` via `api.js`.
-3. The returned event JSON is turned into HTML (organizer card, date/venue info,
-   registration card) and injected into `#event-content`.
-4. Clicking "Follow" or "Register" makes another `api.js` call
-   (`POST /api/organizers/{slug}/follow/`, `POST /api/registrations/`), shows a toast, and
-   re-renders the page with fresh data — no page reload needed for those actions.
+3. The returned event JSON is turned into HTML (institution, date/venue, and the
+   organiser's registration link) and injected into `#event-content`.
+4. Bookmarking calls `POST` or `DELETE /api/events/{id}/save/`. "Register on the
+   organiser's site" calls `POST /api/events/{id}/click-out/` and opens
+   `registration_link` in a new tab.
 
 ### 4.4 Design tokens
 
@@ -244,20 +244,21 @@ the same variables.
 ## 5. Data model summary
 
 ```
-User ──1:1── UserPreference ──M2M── Category ──M2M── Event ──FK── Organizer ──1:M── Follow ──FK── User
-  │                                                      │
-  └──────────────────1:M────────── Registration ─────────┘
+User ──1:1── UserPreference ──M2M── Category ──M2M── Event ──FK── Institution
+  │                                         │
+  └── SavedEvent ───────────────────────────┘
 ```
 
 | Model | Owning app | Purpose |
 |---|---|---|
-| `User` | `users` | Email-based account. Includes `institution`, `education_level` (matches Register page). |
-| `Organizer` | `organizers` | The host behind an event (school, club, company). Curated by admins. |
-| `Follow` | `organizers` | A student following an organizer. |
-| `Category` | `events` | Flat taxonomy (Math, Science, Volleyball, ...) shared by events, preferences, and filters. |
-| `Event` | `events` | Core content: title, organizer, categories, venue, date, fee, capacity, curation flags. |
-| `Registration` | `registrations` | A student's RSVP to an event. Enforces capacity. |
-| `UserPreference` | `preferences` | A student's interests — categories, education levels, locations, feed window. Feeds `recommendations`. |
+| `User` | `users` | Email-based account. Roles include `student`, `institution_staff`, `admin`, `super_admin`, and the non-login `agent` account. |
+| `Institution` | `organizers` | The host behind an event (school, club, company). Curated by admins. |
+| `Section` / `Category` | `events` | Three browse sections, with categories under College Events and High School Events. |
+| `Event` | `events` | Title, institution, categories, format, venue, dates, cost, popularity, and the organiser registration link. |
+| `SavedEvent` | `events` | A bookmark. Any signed-in user can save an event. |
+| `EventRegistration` | `registrations` | Historical on-site RSVPs. New sign-ups are closed (`410`). |
+| `UserPreference` | `preferences` | Sections, categories, format, days, place, and distance. Feeds ranking. |
+| `Proposal` | `agent` | A suggested event waiting for admin review. |
 
 See `docs/API.md` for the exact JSON shape of every model as returned by the API.
 
@@ -284,8 +285,9 @@ See `docs/DEPLOYMENT.md` for step-by-step instructions. In short:
 
 - **Backend** → Render (free web service), reading `DATABASE_URL`/`SUPABASE_*`/`SECRET_KEY`
   etc. from Render's environment variable dashboard (never committed to git).
-- **Frontend** → Netlify, publishing the `frontend/` folder directly (no build command
-  needed since there's no bundler).
+- **Frontend** → Vercel, publishing the `frontend/` folder directly (`frontend/vercel.json`
+  sets security headers; there is no build command). Production origins are
+  `https://www.funkies254.com` and `https://funkies254.com`.
 - **Database + Storage** → Supabase (already "deployed" the moment you create a project).
 
 ---
@@ -301,6 +303,5 @@ See `docs/DEPLOYMENT.md` for step-by-step instructions. In short:
   endpoints (with cookie-based auth, which does need adapting — a mobile app would use
   `Authorization` headers instead), a React Native/Flutter app can reuse 100% of the
   backend unchanged.
-- **Organizer self-service**: today organizers are curated by admins; a future
-  "Organizer" role with its own login could be added as a new permission class without
-  restructuring the `Event`/`Organizer` models.
+- **Institution staff** already create events for their own institution. Admins
+  verify them before they appear publicly.

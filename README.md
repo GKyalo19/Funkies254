@@ -12,7 +12,7 @@ events for them.
 - **Backend**: Python, Django, Django REST Framework, SimpleJWT (httpOnly cookie auth)
 - **Database & media storage**: PostgreSQL + Storage on Supabase 
 - **Frontend**: Vanilla HTML, CSS, and JavaScript (ES modules, no build step)
-- **Hosting**: Render (backend), Vercel (frontend)
+- **Hosting**: Render (backend), Vercel (frontend) — `https://www.funkies254.com`
 - **Testing**: pytest + pytest-django
 
 ## Status

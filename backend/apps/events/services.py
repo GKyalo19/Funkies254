@@ -11,9 +11,18 @@ from django.utils import timezone
 
 from apps.common import supabase_storage
 from apps.common.audit import log_action
-from apps.common.enums import AuditAction, UserRole
+from apps.common.enums import AuditAction, EventSource, InteractionKind, UserRole
+from apps.common.exceptions import BusinessRuleError
 from apps.common.mail import send_new_event_match_email
-from apps.events.models import Event, EventCategory, SavedEvent
+from apps.events.models import Event, EventCategory, EventInteraction, SavedEvent
+
+
+def source_for_actor(actor) -> str:
+    if getattr(actor, "role", None) == UserRole.AGENT:
+        return EventSource.AGENT
+    if getattr(actor, "role", None) == UserRole.INSTITUTION_STAFF:
+        return EventSource.INSTITUTION_STAFF
+    return EventSource.ADMIN
 
 
 def _upload_cover(cover_image, event_id=None):
@@ -32,8 +41,9 @@ def create_event(*, actor, categories=None, cover_image=None, **fields) -> Event
         if cover_url:
             fields["cover_image_url"] = cover_url
         # Admin-curated events go live immediately; staff submissions wait for
-        # administrator verification (§1.1).
-        if actor.is_platform_admin:
+        # administrator verification (§1.1). The agent never auto-verifies (AGENT-1).
+        fields.setdefault("source", source_for_actor(actor))
+        if actor.is_platform_admin and actor.role != UserRole.AGENT:
             fields.update(
                 is_verified=True, verified_by=actor, verified_at=timezone.now()
             )
@@ -121,6 +131,13 @@ def notify_users_of_matching_event(event: Event, *, actor=None) -> int:
 
 
 def set_event_verified(*, actor, event: Event, verified: bool) -> Event:
+    if verified:
+        link = event.registration_link or ""
+        if not link.startswith("https://"):
+            raise BusinessRuleError(
+                "A published event needs an https:// registration link.",
+                code="registration_link_required",
+            )
     was_verified = event.is_verified
     with transaction.atomic():
         event.is_verified = verified
@@ -159,3 +176,77 @@ def save_event(*, user, event: Event):
 def unsave_event(*, user, event: Event) -> bool:
     deleted, _ = SavedEvent.objects.filter(user=user, event=event).delete()
     return bool(deleted)
+
+
+def record_event_view(*, event: Event, user=None, ip_address=None) -> None:
+    """At most one view per user or IP per event per hour (EVT-2)."""
+    from datetime import timedelta
+
+    since = timezone.now() - timedelta(hours=1)
+    recent = EventInteraction.objects.filter(
+        event=event, kind=InteractionKind.VIEW, created_at__gte=since
+    )
+    if user is not None and getattr(user, "is_authenticated", False):
+        if recent.filter(user=user).exists():
+            return
+        EventInteraction.objects.create(
+            event=event, user=user, ip_address=ip_address, kind=InteractionKind.VIEW
+        )
+        return
+    if ip_address and recent.filter(user__isnull=True, ip_address=ip_address).exists():
+        return
+    EventInteraction.objects.create(
+        event=event,
+        user=None,
+        ip_address=ip_address,
+        kind=InteractionKind.VIEW,
+    )
+
+
+def record_click_out(*, event: Event, user=None, ip_address=None) -> None:
+    EventInteraction.objects.create(
+        event=event,
+        user=user if user is not None and getattr(user, "is_authenticated", False) else None,
+        ip_address=ip_address,
+        kind=InteractionKind.CLICK_OUT,
+    )
+
+
+def compute_popularity() -> int:
+    """Recompute popularity_score from the last 30 days (RANK-4)."""
+    from datetime import timedelta
+
+    from django.db.models import Count
+
+    since = timezone.now() - timedelta(days=30)
+    saves = {
+        row["event_id"]: row["n"]
+        for row in SavedEvent.objects.filter(saved_at__gte=since)
+        .values("event_id")
+        .annotate(n=Count("id"))
+    }
+    interactions = EventInteraction.objects.filter(created_at__gte=since)
+    views = {
+        row["event_id"]: row["n"]
+        for row in interactions.filter(kind=InteractionKind.VIEW)
+        .values("event_id")
+        .annotate(n=Count("id"))
+    }
+    clicks = {
+        row["event_id"]: row["n"]
+        for row in interactions.filter(kind=InteractionKind.CLICK_OUT)
+        .values("event_id")
+        .annotate(n=Count("id"))
+    }
+    updated = 0
+    for event in Event.objects.all().only("id", "external_mentions", "popularity_score"):
+        score = (
+            3 * saves.get(event.id, 0)
+            + 2 * clicks.get(event.id, 0)
+            + views.get(event.id, 0)
+            + 5 * (event.external_mentions or 0)
+        )
+        if event.popularity_score != score:
+            Event.objects.filter(pk=event.pk).update(popularity_score=score)
+            updated += 1
+    return updated

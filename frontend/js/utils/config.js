@@ -3,8 +3,7 @@
  *
  * Local dev (opening the frontend via a local server on 127.0.0.1/localhost)
  * talks to the local Django server. Everything else (Netlify) talks to the
- * deployed Render backend — update RENDER_API_URL once you know your real
- * Render service URL.
+ * deployed Render backend. Production pages are served by Vercel.
  */
 const LOCAL_API_URL = "http://127.0.0.1:8000/api";
 const RENDER_API_URL = "https://funkies254-api.onrender.com/api";

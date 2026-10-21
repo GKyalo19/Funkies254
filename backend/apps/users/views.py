@@ -171,6 +171,36 @@ class LogoutView(APIView):
         return token_service.clear_auth_cookies(response)
 
 
+class PasswordChangeView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        from apps.users.services import change_password
+
+        current = request.data.get("current_password") or ""
+        new = request.data.get("new_password") or ""
+        confirm = request.data.get("new_password_confirm") or ""
+        if new != confirm:
+            return Response(
+                {"detail": "Passwords do not match.", "code": "password_mismatch",
+                 "errors": {"new_password_confirm": ["Passwords do not match."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        change_password(user=request.user, current_password=current, new_password=new)
+        return Response({"detail": "Password updated."})
+
+
+class DeleteAccountView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        from apps.users.services import delete_own_account
+
+        delete_own_account(user=request.user, password=request.data.get("password") or "")
+        response = Response({"detail": "Account deleted."})
+        return token_service.clear_auth_cookies(response)
+
+
 class MeView(generics.RetrieveUpdateAPIView):
     """GET/PATCH the authenticated user's own profile."""
 

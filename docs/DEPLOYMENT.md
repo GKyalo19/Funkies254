@@ -1,10 +1,10 @@
 # Funkies254 — Deployment Guide (all free tiers)
 
-This deploys the backend to **Render**, the frontend to **Netlify**, and the database +
+This deploys the backend to **Render**, the frontend to **Vercel**, and the database +
 media storage to **Supabase** — no credit card required for any of them at this scale.
 
 Do this **after** local setup works (see `docs/SETUP.md`) and you've pushed the repo to
-GitHub (both Render and Netlify deploy from a git repo).
+GitHub (both Render and Vercel deploy from a git repo).
 
 ---
 
@@ -46,9 +46,9 @@ variables and nowhere else — never in the frontend, never in git.
    | `SUPABASE_SERVICE_ROLE_KEY` | From step 1 |
    | `SUPABASE_BUCKET_EVENT_COVERS` | `event-covers` |
    | `SUPABASE_BUCKET_AVATARS` | `avatars` |
-   | `CORS_ALLOWED_ORIGINS` | `https://<your-netlify-site>.netlify.app` (set after step 3) |
+   | `CORS_ALLOWED_ORIGINS` | `https://www.funkies254.com,https://funkies254.com,https://funkies254.vercel.app` |
    | `CSRF_TRUSTED_ORIGINS` | Same as above |
-   | `FRONTEND_BASE_URL` | Same as above |
+   | `FRONTEND_BASE_URL` | `https://www.funkies254.com` |
 
 4. **Manual Deploy** → trigger a deploy. Render will `pip install`, run `collectstatic`,
    then start `gunicorn`. The `Procfile` release phase runs `migrate` on every deploy, so
@@ -87,25 +87,25 @@ variables and nowhere else — never in the frontend, never in git.
 
 ---
 
-## 3. Frontend → Netlify
+## 3. Frontend → Vercel
 
-1. On [netlify.com](https://netlify.com): **Add new site** → **Import an existing
-   project** → connect your repo.
-2. **Base directory**: `frontend`
-3. **Build command**: leave blank (no build step).
-4. **Publish directory**: `frontend` (or `.` if you set base directory to `frontend`).
-5. Deploy. Netlify gives you a URL like `https://funkies254.netlify.app`.
-6. **Point the frontend at the real backend**: edit `frontend/js/utils/config.js` and set
-   `RENDER_API_URL` to your Render service URL (e.g.
-   `https://funkies254-api.onrender.com/api`), commit, and push — Netlify redeploys on
-   every push to your main branch.
-7. Go back to Render and set `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS` and
-   `FRONTEND_BASE_URL` to your real Netlify URL, then redeploy the backend so the new
-   origin takes effect.
+1. On [vercel.com](https://vercel.com): **Add New** → **Project** → import the repo.
+2. **Root directory**: `frontend`
+3. **Framework preset**: Other. Leave the build command blank.
+4. `frontend/vercel.json` already sets security headers. There is no SPA rewrite;
+   each page is a real HTML file.
+5. Deploy. The project URL is `https://funkies254.vercel.app`. The GoDaddy domain
+   `funkies254.com` (apex and `www`) points at that same project.
+6. **Point the frontend at the real backend**: `frontend/js/utils/config.js` should
+   use `https://funkies254-api.onrender.com/api`.
+7. On Render, `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` must list
+   `https://www.funkies254.com`, `https://funkies254.com`, and
+   `https://funkies254.vercel.app`. `FRONTEND_BASE_URL` is
+   `https://www.funkies254.com` (scheme included). Redeploy the API after changing them.
 
 ### Why the cookie flags matter here
 
-Netlify and Render are different sites, so the auth cookies are cross-site. Browsers only
+Vercel and Render are different sites, so the auth cookies are cross-site. Browsers only
 send cross-site cookies when they are `SameSite=None; Secure`, and they reject
 `SameSite=None` without `Secure`. If login appears to succeed but the next request is
 401, this pairing is almost always the cause.
@@ -117,7 +117,7 @@ send cross-site cookies when they are `SameSite=None; Secure`, and they reject
 - [ ] `GET /api/health/` returns `{"status": "ok"}`.
 - [ ] `GET /api/categories/` returns the seeded taxonomy (confirms the Supabase
       connection and that migrations ran).
-- [ ] `https://<netlify-site>/index.html` loads and shows events.
+- [ ] `https://www.funkies254.com/index.html` loads and shows events.
 - [ ] Registering a new account works end-to-end. If it fails, check Render's logs —
       it is almost always a `CORS_ALLOWED_ORIGINS`, cookie-flag or `DATABASE_URL`
       mismatch.
@@ -132,7 +132,7 @@ send cross-site cookies when they are `SameSite=None; Secure`, and they reject
 
 ## 5. Custom domain (optional, later)
 
-Both Netlify and Render support free custom domains + automatic HTTPS. Point your DNS
-at Netlify for the frontend (e.g. `funkies254.com`) and a subdomain at Render for the API
-(e.g. `api.funkies254.com`), then update `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`,
-`ALLOWED_HOSTS`, and `frontend/js/utils/config.js` to match.
+Vercel and Render both attach HTTPS to custom domains. GoDaddy DNS for
+`funkies254.com` and `www.funkies254.com` points at the Vercel project. The API
+stays on `funkies254-api.onrender.com`. Any new frontend origin has to be added
+to `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` before login will work there.

@@ -30,11 +30,6 @@ def send_templated_email(*, to, subject, template, context) -> bool:
     if not recipient:
         return False
 
-    api_token = getattr(settings, "MAILTRAP_API_TOKEN", "")
-    if not api_token:
-        logger.error("MAILTRAP_API_TOKEN is not configured")
-        return False
-
     payload = {
         "frontend_base_url": (settings.FRONTEND_BASE_URL or "").rstrip("/"),
         **context,
@@ -42,6 +37,17 @@ def send_templated_email(*, to, subject, template, context) -> bool:
 
     text_body = render_to_string(f"emails/{template}.txt", payload)
     html_body = render_to_string(f"emails/{template}.html", payload)
+
+    api_token = getattr(settings, "MAILTRAP_API_TOKEN", "")
+    # Tests and local console runs use Django's email backend. The Mailtrap API
+    # is only for deployed environments, so a test never emails a real inbox.
+    if settings.EMAIL_BACKEND.endswith(("locmem.EmailBackend", "console.EmailBackend")) or not api_token:
+        from django.core.mail import EmailMultiAlternatives
+
+        message = EmailMultiAlternatives(subject, text_body, settings.DEFAULT_FROM_EMAIL, recipient)
+        message.attach_alternative(html_body, "text/html")
+        message.send(fail_silently=False)
+        return True
 
     sender_name, sender_email = parseaddr(settings.DEFAULT_FROM_EMAIL)
 

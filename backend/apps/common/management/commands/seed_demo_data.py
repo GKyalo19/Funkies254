@@ -16,7 +16,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.common.enums import RegistrationStatus, SchoolLevelSlug, UserRole
+from django.apps import apps as django_apps
+
 from apps.events.models import Category, Event, EventCategory, SavedEvent, SchoolLevel
+from apps.events.taxonomy import seed_taxonomy
 from apps.organizers.models import Institution
 from apps.preferences.models import UserPreference, UserPreferenceCategory
 from apps.registrations.models import EventRegistration
@@ -81,11 +84,8 @@ class Command(BaseCommand):
     # ---------------------------------------------------------------- reference
 
     def _seed_categories(self):
-        categories = {}
-        for name, slug in CATEGORIES:
-            category, _ = Category.objects.get_or_create(slug=slug, defaults={"name": name})
-            categories[slug] = category
-        return categories
+        seed_taxonomy(django_apps)
+        return {category.slug: category for category in Category.objects.all()}
 
     def _seed_school_levels(self):
         levels = {}
@@ -248,34 +248,37 @@ class Command(BaseCommand):
 
         events = []
         for blueprint in blueprints:
-            event, created = Event.objects.get_or_create(
-                slug=blueprint["slug"],
-                defaults={
-                    "title": blueprint["title"],
-                    "description": blueprint["description"],
-                    "institution": institution,
-                    "start_time": blueprint["start"],
-                    "end_time": blueprint["start"] + timedelta(hours=blueprint["hours"]),
-                    "venue": blueprint["venue"],
-                    "location": blueprint["location"],
-                    "school_level": levels[blueprint["level"]],
-                    "is_virtual": blueprint["is_virtual"],
-                    "registration_link": (
-                        "https://meet.funkies254.test/debate" if blueprint["is_virtual"] else None
-                    ),
-                    "is_verified": True,
-                    "verified_at": now,
-                    "created_by": staff,
-                },
+            registration_link = f"https://events.example.com/{blueprint['slug']}"
+            defaults = {
+                "title": blueprint["title"],
+                "description": blueprint["description"],
+                "institution": institution,
+                "start_time": blueprint["start"],
+                "end_time": blueprint["start"] + timedelta(hours=blueprint["hours"]),
+                "venue": blueprint["venue"],
+                "location": blueprint["location"],
+                "school_level": levels[blueprint["level"]],
+                "is_virtual": blueprint["is_virtual"],
+                "registration_link": registration_link,
+                "is_verified": True,
+                "verified_at": now,
+                "created_by": staff,
+            }
+            event, created = Event.objects.get_or_create(slug=blueprint["slug"], defaults=defaults)
+            if not created:
+                event.start_time = defaults["start_time"]
+                event.end_time = defaults["end_time"]
+                event.registration_link = registration_link
+                event.is_verified = True
+                event.is_virtual = blueprint["is_virtual"]
+                event.save()
+            EventCategory.objects.bulk_create(
+                [
+                    EventCategory(event=event, category=categories[slug])
+                    for slug in blueprint["categories"]
+                ],
+                ignore_conflicts=True,
             )
-            if created:
-                EventCategory.objects.bulk_create(
-                    [
-                        EventCategory(event=event, category=categories[slug])
-                        for slug in blueprint["categories"]
-                    ],
-                    ignore_conflicts=True,
-                )
             events.append(event)
         return events
 

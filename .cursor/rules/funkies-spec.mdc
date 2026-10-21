@@ -1,0 +1,15 @@
+---
+description: Follow the Funkies254 pre-launch spec before changing the product
+alwaysApply: true
+---
+
+Before changing models, API behaviour, or pages, read `docs/SPEC.md`,
+`docs/DATABASE.md`, and `docs/API.md`.
+
+- Schema changes go through Django migrations only. Do not hand-edit Supabase.
+- On-site registration stays closed: `POST /api/registrations/` returns 410 and
+  the UI sends visitors to the organiser's `https://` link.
+- Agent-created events are never auto-verified. Approving or rejecting a
+  proposal writes `AdminActivityLog`.
+- Keep existing tests passing unless `docs/SPEC.md` intentionally changes the
+  contract, and update the docs in the same change.

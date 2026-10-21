@@ -55,3 +55,33 @@ class AdminActivityLog(UUIDPrimaryKeyModel):
 
     def __str__(self):
         return f"{self.action} on {self.table_name} ({self.record_id})"
+
+
+class RequestMetric(UUIDPrimaryKeyModel):
+    """One row per API request, kept for 30 days (AGENT-8)."""
+
+    method = models.CharField(max_length=8)
+    path = models.CharField(max_length=200)
+    status_code = models.PositiveSmallIntegerField()
+    duration_ms = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "request_metrics"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["created_at"], name="request_metric_created_idx"),
+            models.Index(fields=["path", "created_at"], name="request_metric_path_idx"),
+        ]
+
+
+class NewsletterSubscriber(UUIDPrimaryKeyModel):
+    email = models.EmailField(unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "newsletter_subscribers"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return self.email

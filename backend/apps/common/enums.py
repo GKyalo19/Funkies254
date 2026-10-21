@@ -13,6 +13,8 @@ class UserRole(models.TextChoices):
     INSTITUTION_STAFF = "institution_staff", "Institution staff"
     ADMIN = "admin", "Admin"
     SUPER_ADMIN = "super_admin", "Super admin"
+    # Service account for the ingestion agent. It cannot sign in (AGENT-1).
+    AGENT = "agent", "Agent"
 
 
 #: Roles that may curate events and institutions.
@@ -49,6 +51,46 @@ class AuditAction(models.TextChoices):
     REINSTATED_USER = "reinstated_user", "Reinstated user"
     CREATED_ADMIN = "created_admin", "Created admin"
     REMOVED_ADMIN = "removed_admin", "Removed admin"
+    APPROVED_PROPOSAL = "approved_proposal", "Approved proposal"
+    REJECTED_PROPOSAL = "rejected_proposal", "Rejected proposal"
+    DELETED_ACCOUNT = "deleted_account", "Deleted account"
+
+
+class EventFormat(models.TextChoices):
+    IN_PERSON = "in_person", "In person"
+    ONLINE = "online", "Online"
+    HYBRID = "hybrid", "Hybrid"
+
+
+class EventSource(models.TextChoices):
+    ADMIN = "admin", "Admin"
+    INSTITUTION_STAFF = "institution_staff", "Institution staff"
+    AGENT = "agent", "Agent"
+
+
+class InteractionKind(models.TextChoices):
+    VIEW = "view", "View"
+    CLICK_OUT = "click_out", "Click out"
+
+
+class ProposalKind(models.TextChoices):
+    NEW = "new", "New"
+    UPDATE = "update", "Update"
+    UNPUBLISH = "unpublish", "Unpublish"
+
+
+class ProposalStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+    EXPIRED = "expired", "Expired"
+
+
+class SourceKind(models.TextChoices):
+    HTML = "html", "HTML"
+    RSS = "rss", "RSS"
+    ICAL = "ical", "iCal"
+    SEARCH = "search", "Search"
 
 
 class SchoolLevelSlug(models.TextChoices):

@@ -24,10 +24,14 @@
       <aside class="filter-panel">
         <h3>Filter</h3>
         <div class="filter-group">
-          <h4>Event Category</h4>
-          <div id="filter-category"></div>
+          <h4>Section</h4>
+          <div id="filter-section"></div>
         </div>
         <div class="filter-group">
+          <h4>Category</h4>
+          <div id="filter-category"></div>
+        </div>
+        <div class="filter-group" id="school-level-group">
           <h4>School level</h4>
           <div id="filter-school-level"></div>
         </div>
@@ -38,6 +42,18 @@
         <div class="filter-group">
           <h4>Dates</h4>
           <div id="filter-when"></div>
+        </div>
+        <div class="filter-group">
+          <h4>Location</h4>
+          <select id="filter-country"></select>
+          <button type="button" class="btn btn-secondary btn-sm" id="near-me" style="margin-top:8px;">Near me</button>
+        </div>
+        <div class="filter-group">
+          <label><input type="checkbox" id="filter-free" /> Free only</label>
+        </div>
+        <div class="filter-group">
+          <h4>Sort</h4>
+          <div id="filter-sort"></div>
         </div>
         <button class="btn btn-secondary btn-block btn-sm" id="filter-clear">Clear filters</button>
       </aside>

@@ -13,6 +13,7 @@ def test_role_vocabulary_matches_the_specification():
         "institution_staff",
         "admin",
         "super_admin",
+        "agent",
     ]
     assert set(ADMIN_ROLES) == {UserRole.ADMIN, UserRole.SUPER_ADMIN}
     assert UserRole.STUDENT not in PRIVILEGED_ROLES
